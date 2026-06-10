@@ -30,13 +30,22 @@ export function SettingsScreen() {
                 key={s.id}
                 onClick={() => setActive(s.id)}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
+                  "group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all duration-200",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   active === s.id
-                    ? "bg-card text-foreground"
+                    ? "bg-card text-foreground shadow-sm"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 )}
               >
-                <s.icon className="h-4 w-4 shrink-0" />
+                {active === s.id && (
+                  <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-primary md:block" />
+                )}
+                <s.icon
+                  className={cn(
+                    "h-4 w-4 shrink-0 transition-colors",
+                    active === s.id ? "text-primary" : "group-hover:text-foreground",
+                  )}
+                />
                 <span className="whitespace-nowrap">{s.label}</span>
               </button>
             ))}
@@ -59,8 +68,11 @@ export function SettingsScreen() {
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <label className="mb-1.5 block text-sm text-muted-foreground">{label}</label>
-      <div className="rounded-lg border border-border bg-input px-3 py-2.5 text-foreground">{value}</div>
+      <label className="mb-1.5 block text-sm font-medium text-foreground/80">{label}</label>
+      <input
+        defaultValue={value}
+        className="w-full rounded-lg border border-border bg-input px-3 py-2.5 text-foreground transition-all duration-200 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
+      />
     </div>
   )
 }

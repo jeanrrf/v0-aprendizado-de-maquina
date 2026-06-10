@@ -67,7 +67,7 @@ export function SearchScreen() {
       <div className="mx-auto max-w-3xl">
         <h1 className="mb-6 text-xl font-semibold text-foreground">Pesquisar</h1>
 
-        <div className="mb-6 flex items-center gap-3 rounded-full border border-border bg-input px-4 py-3">
+        <div className="mb-6 flex items-center gap-3 rounded-full border border-border bg-input px-4 py-3 transition-all duration-200 focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20">
           <Search className="h-5 w-5 text-muted-foreground" />
           <input
             type="text"
@@ -89,7 +89,7 @@ export function SearchScreen() {
                 <button
                   key={term}
                   onClick={() => setQuery(term)}
-                  className="rounded-full border border-border bg-card px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  className="rounded-full border border-border bg-card px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {term}
                 </button>
@@ -102,16 +102,29 @@ export function SearchScreen() {
           <div className="mb-2 text-sm text-muted-foreground">
             {results.length} {results.length === 1 ? "resultado" : "resultados"}
           </div>
+          {results.length === 0 && (
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-16 text-center">
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                <Search className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <p className="font-medium text-foreground">Nenhum resultado encontrado</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {'Tente outro termo para "'}
+                {query}
+                {'".'}
+              </p>
+            </div>
+          )}
           {results.map((result) => (
             <button
               key={result.id}
-              className="flex w-full items-start gap-4 rounded-xl border border-border bg-card p-4 text-left transition-colors hover:bg-muted"
+              className="group flex w-full items-start gap-4 rounded-xl border border-border bg-card p-4 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md hover:shadow-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted transition-colors group-hover:bg-primary/15">
                 {result.type === "conversa" ? (
-                  <MessageSquare className="h-5 w-5 text-muted-foreground" />
+                  <MessageSquare className="h-5 w-5 text-muted-foreground transition-colors group-hover:text-primary" />
                 ) : (
-                  <FileText className="h-5 w-5 text-muted-foreground" />
+                  <FileText className="h-5 w-5 text-muted-foreground transition-colors group-hover:text-primary" />
                 )}
               </div>
               <div className="min-w-0 flex-1">

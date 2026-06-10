@@ -1,6 +1,7 @@
 "use client"
 
 import { PenLine, GraduationCap, Code, MoreHorizontal } from "lucide-react"
+import { AinexOrb } from "@/components/ainex/ainex-orb"
 
 interface Message {
   id: string
@@ -25,6 +26,7 @@ export function ChatMessages() {
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="mx-auto max-w-3xl space-y-6">
+        <AinexHero />
         {mockMessages.map((message) => (
           <div key={message.id}>
             {message.role === "user" ? (
@@ -34,6 +36,21 @@ export function ChatMessages() {
             )}
           </div>
         ))}
+      </div>
+    </div>
+  )
+}
+
+function AinexHero() {
+  return (
+    <div className="flex flex-col items-center gap-3 py-6 text-center">
+      <AinexOrb size={120} state="idle" />
+      <div>
+        <h2 className="text-lg font-semibold text-foreground">AINEX</h2>
+        <p className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground">
+          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+          Esfera de luz neural · online
+        </p>
       </div>
     </div>
   )
@@ -55,10 +72,8 @@ function AssistantMessage({ content }: { content: string }) {
     <div className="space-y-4">
       <div className="rounded-2xl bg-card border border-border p-4">
         <div className="mb-3 flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary">
-            <span className="text-sm font-bold text-primary-foreground">C</span>
-          </div>
-          <span className="font-semibold text-foreground">Claude</span>
+          <AinexOrb size={32} state="speaking" />
+          <span className="font-semibold text-foreground">AINEX</span>
         </div>
         <p className="leading-relaxed text-foreground">{content}</p>
       </div>

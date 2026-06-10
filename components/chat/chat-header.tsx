@@ -21,7 +21,7 @@ export function ChatHeader({ title, showModelInfo = false }: ChatHeaderProps) {
         {showModelInfo && (
           <>
             <span className="hidden text-sm text-muted-foreground sm:inline">
-              Modelo: <span className="text-foreground">Claude 3</span>
+              Modelo: <span className="text-foreground">AINEX Neural</span>
             </span>
             <span className="hidden text-sm text-muted-foreground sm:inline">Responsivo</span>
           </>
