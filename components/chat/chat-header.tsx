@@ -2,22 +2,31 @@
 
 import { ArrowLeft, MoreHorizontal } from "lucide-react"
 
-export function ChatHeader() {
+interface ChatHeaderProps {
+  title: string
+  showModelInfo?: boolean
+}
+
+export function ChatHeader({ title, showModelInfo = false }: ChatHeaderProps) {
   return (
     <header className="flex h-14 items-center justify-between border-b border-border px-4">
       <div className="flex items-center gap-3">
-        <button className="flex items-center gap-2 text-foreground hover:text-muted-foreground transition-colors">
+        <button className="flex items-center gap-2 text-foreground transition-colors hover:text-muted-foreground">
           <ArrowLeft className="h-4 w-4" />
-          <span className="font-medium">Chat com Claude</span>
+          <span className="font-medium">{title}</span>
         </button>
       </div>
-      
+
       <div className="flex items-center gap-4">
-        <span className="text-sm text-muted-foreground">
-          Modelo: <span className="text-foreground">Claude 3</span>
-        </span>
-        <span className="text-sm text-muted-foreground">Responsivo</span>
-        <button className="p-1 hover:bg-muted rounded transition-colors">
+        {showModelInfo && (
+          <>
+            <span className="hidden text-sm text-muted-foreground sm:inline">
+              Modelo: <span className="text-foreground">Claude 3</span>
+            </span>
+            <span className="hidden text-sm text-muted-foreground sm:inline">Responsivo</span>
+          </>
+        )}
+        <button className="rounded p-1 transition-colors hover:bg-muted">
           <MoreHorizontal className="h-5 w-5 text-muted-foreground" />
         </button>
       </div>

@@ -4,10 +4,11 @@ import { Menu, MessageCircle, Search, FileText, Settings } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface SidebarProps {
-  activeItem?: string
+  activeItem: string
+  onSelect: (id: string) => void
 }
 
-export function Sidebar({ activeItem = "chat" }: SidebarProps) {
+export function Sidebar({ activeItem, onSelect }: SidebarProps) {
   const items = [
     { id: "menu", icon: Menu, label: "Menu" },
     { id: "chat", icon: MessageCircle, label: "Chat" },
@@ -21,16 +22,22 @@ export function Sidebar({ activeItem = "chat" }: SidebarProps) {
       {items.map((item) => (
         <button
           key={item.id}
+          onClick={() => onSelect(item.id)}
           className={cn(
             "mb-2 flex h-12 w-12 items-center justify-center rounded-lg transition-colors",
             "hover:bg-sidebar-accent",
-            activeItem === item.id && "text-sidebar-primary"
+            activeItem === item.id ? "bg-sidebar-accent text-sidebar-primary" : "text-sidebar-foreground",
           )}
           aria-label={item.label}
+          aria-current={activeItem === item.id ? "page" : undefined}
         >
           <item.icon className="h-5 w-5" />
         </button>
       ))}
+
+      <div className="mt-auto flex h-10 w-10 items-center justify-center rounded-full bg-muted text-xs font-medium text-foreground">
+        JF
+      </div>
     </aside>
   )
 }
