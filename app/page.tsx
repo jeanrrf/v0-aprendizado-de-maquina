@@ -12,7 +12,7 @@ import { SettingsScreen } from "@/components/chat/settings-screen"
 
 const titles: Record<string, string> = {
   menu: "Conversas",
-  chat: "Chat com Claude",
+  chat: "Chat com AINEX",
   search: "Pesquisar",
   files: "Arquivos",
   settings: "Configurações",

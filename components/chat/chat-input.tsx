@@ -1,6 +1,7 @@
 "use client"
 
-import { Plus, Paperclip, ArrowUp, Send } from "lucide-react"
+import { Plus, Paperclip, ArrowUp } from "lucide-react"
+import { AinexOrb } from "@/components/ainex/ainex-orb"
 
 export function ChatInput() {
   return (
@@ -32,9 +33,9 @@ export function ChatInput() {
         </div>
         
         {/* Send button */}
-        <button className="flex items-center gap-2 rounded-full bg-card border border-border px-4 py-2 hover:bg-muted transition-colors">
-          <Send className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm text-foreground">Claude</span>
+        <button className="flex items-center gap-2 rounded-full bg-card border border-border px-3 py-1.5 hover:bg-muted transition-colors">
+          <AinexOrb size={24} state="idle" />
+          <span className="text-sm text-foreground">AINEX</span>
         </button>
       </div>
     </div>
