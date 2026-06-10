@@ -9,8 +9,10 @@ import { MenuScreen } from "@/components/chat/menu-screen"
 import { SearchScreen } from "@/components/chat/search-screen"
 import { FilesScreen } from "@/components/chat/files-screen"
 import { SettingsScreen } from "@/components/chat/settings-screen"
+import { NeuralConsole } from "@/components/ainex/neural-console"
 
 const titles: Record<string, string> = {
+  ainex: "AINEX · Console Neural",
   menu: "Conversas",
   chat: "Chat com AINEX",
   search: "Pesquisar",
@@ -19,7 +21,7 @@ const titles: Record<string, string> = {
 }
 
 export default function ChatPage() {
-  const [active, setActive] = useState("chat")
+  const [active, setActive] = useState("ainex")
 
   return (
     <div className="relative flex h-screen overflow-hidden bg-background">
@@ -37,6 +39,7 @@ export default function ChatPage() {
           <ChatHeader title={titles[active]} showModelInfo={active === "chat"} />
 
           <div key={active} className="flex flex-1 flex-col overflow-hidden duration-300 animate-in fade-in-50 slide-in-from-bottom-2">
+            {active === "ainex" && <NeuralConsole />}
             {active === "chat" && (
               <>
                 <ChatMessages />

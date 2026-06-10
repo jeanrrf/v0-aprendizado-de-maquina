@@ -1,6 +1,6 @@
 "use client"
 
-import { Menu, MessageCircle, Search, FileText, Settings } from "lucide-react"
+import { Menu, MessageCircle, Search, FileText, Settings, Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface SidebarProps {
@@ -10,6 +10,7 @@ interface SidebarProps {
 
 export function Sidebar({ activeItem, onSelect }: SidebarProps) {
   const items = [
+    { id: "ainex", icon: Sparkles, label: "AINEX" },
     { id: "menu", icon: Menu, label: "Menu" },
     { id: "chat", icon: MessageCircle, label: "Chat" },
     { id: "search", icon: Search, label: "Pesquisar" },
