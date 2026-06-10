@@ -67,10 +67,10 @@ export function MenuScreen() {
           {conversations.map((conv) => (
             <button
               key={conv.id}
-              className="group flex w-full items-center gap-4 rounded-xl border border-border bg-card p-4 text-left transition-colors hover:bg-muted"
+              className="group flex w-full items-center gap-4 rounded-xl border border-border bg-card p-3.5 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:bg-card hover:shadow-md hover:shadow-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted">
-                <MessageSquare className="h-5 w-5 text-muted-foreground" />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted transition-colors group-hover:bg-primary/15">
+                <MessageSquare className="h-5 w-5 text-muted-foreground transition-colors group-hover:text-primary" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">

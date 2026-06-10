@@ -24,14 +24,19 @@ export function Sidebar({ activeItem, onSelect }: SidebarProps) {
           key={item.id}
           onClick={() => onSelect(item.id)}
           className={cn(
-            "mb-2 flex h-12 w-12 items-center justify-center rounded-lg transition-colors",
-            "hover:bg-sidebar-accent",
-            activeItem === item.id ? "bg-sidebar-accent text-sidebar-primary" : "text-sidebar-foreground",
+            "group relative mb-2 flex h-12 w-12 items-center justify-center rounded-lg transition-all duration-200",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar",
+            activeItem === item.id
+              ? "bg-sidebar-accent text-sidebar-primary"
+              : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground",
           )}
           aria-label={item.label}
           aria-current={activeItem === item.id ? "page" : undefined}
         >
-          <item.icon className="h-5 w-5" />
+          {activeItem === item.id && (
+            <span className="absolute left-0 top-1/2 h-6 w-0.5 -translate-y-1/2 rounded-r-full bg-primary" />
+          )}
+          <item.icon className="h-5 w-5 transition-transform duration-200 group-hover:scale-110" />
         </button>
       ))}
 
