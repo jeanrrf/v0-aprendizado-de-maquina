@@ -7,9 +7,11 @@ Esta etapa prepara o repositório para a integração inicial com NVIDIA, manten
 ## Arquitetura atual
 
 - `app/layout.tsx`: shell global, metadados e Analytics.
-- `app/page.tsx`: composição da UI e estado local de navegação entre telas.
+- `app/page.tsx`: composição da UI, estado local de navegação e nome do modelo ativo recebido da API NVIDIA.
 - `components/chat/`: superfícies de chat e navegação da interface.
 - `components/ainex/`: elementos visuais AINEX atualmente usados pela UI (`AinexOrb` e `ResonanceField`).
+- `app/api/chat/route.ts`: integra a NVIDIA Chat API usando `NVIDIA_API_KEY` e `NVIDIA_MODEL` e devolve o modelo ativo para a UI.
+- `components/chat/settings-screen.tsx`: exibe `nvidia/nemotron-3-ultra-550b-a55b` como modelo configurado.
 - `components/ui/`: componentes shadcn/ui instalados e reutilizáveis.
 - `lib/` e `hooks/`: utilitários e hooks compartilhados.
 - Nenhuma camada de servidor, persistência, runtime ou integração AINEX foi adicionada.

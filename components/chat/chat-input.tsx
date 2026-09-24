@@ -9,7 +9,8 @@ export function ChatInput({ onSubmit, isLoading }: { onSubmit: (message: string)
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (event.nativeEvent instanceof SubmitEvent && event.nativeEvent.isComposing) return
+    const nativeEvent = event.nativeEvent as SubmitEvent & { isComposing?: boolean; keyCode?: number }
+    if (nativeEvent.isComposing || nativeEvent.keyCode === 229) return
     const value = message.trim()
     if (!value || isLoading) return
     onSubmit(value)

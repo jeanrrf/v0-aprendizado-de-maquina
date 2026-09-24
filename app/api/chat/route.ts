@@ -53,5 +53,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "A NVIDIA API não retornou conteúdo." }, { status: 502 })
   }
 
-  return NextResponse.json({ content })
+  return NextResponse.json({ content, model })
 }
