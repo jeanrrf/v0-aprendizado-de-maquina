@@ -9,7 +9,7 @@ export interface Message {
   content: string
 }
 
-export function ChatMessages({ messages }: { messages: Message[] }) {
+export function ChatMessages({ messages, error }: { messages: Message[]; error?: string }) {
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="mx-auto max-w-3xl space-y-6">
@@ -19,6 +19,7 @@ export function ChatMessages({ messages }: { messages: Message[] }) {
             {message.role === "user" ? <UserMessage content={message.content} /> : <AssistantMessage content={message.content} />}
           </div>
         ))}
+        {error && <p role="alert" className="rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>}
       </div>
     </div>
   )

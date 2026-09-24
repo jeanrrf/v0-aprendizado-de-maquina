@@ -22,6 +22,25 @@ const titles: Record<string, string> = {
 
 export default function ChatPage() {
   const [active, setActive] = useState("ainex")
+  const [messages, setMessages] = useState<{ id: string; role: "user" | "assistant"; content: string }[]>([])
+  const [error, setError] = useState<string>()
+  const [isLoading, setIsLoading] = useState(false)
+
+  async function sendMessage(message: string) {
+    setError(undefined)
+    setMessages((current) => [...current, { id: crypto.randomUUID(), role: "user", content: message }])
+    setIsLoading(true)
+    try {
+      const response = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message }) })
+      const data = (await response.json()) as { content?: string; error?: string }
+      if (!response.ok || !data.content) throw new Error(data.error ?? "Não foi possível obter uma resposta.")
+      setMessages((current) => [...current, { id: crypto.randomUUID(), role: "assistant", content: data.content! }])
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Ocorreu um erro inesperado.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   return (
     <div className="relative flex h-screen overflow-hidden bg-background">
@@ -42,8 +61,8 @@ export default function ChatPage() {
             {active === "ainex" && <ResonanceField />}
             {active === "chat" && (
               <>
-                <ChatMessages />
-                <ChatInput />
+                <ChatMessages messages={messages} error={error} />
+                <ChatInput onSubmit={sendMessage} isLoading={isLoading} />
               </>
             )}
             {active === "menu" && <MenuScreen />}

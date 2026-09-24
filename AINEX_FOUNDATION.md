@@ -2,7 +2,7 @@
 
 ## Escopo desta etapa
 
-Esta etapa prepara o repositório para uma futura migração de runtime AINEX sem implementar NVIDIA, voz, agentes, memória, MCP ou integrações de servidor.
+Esta etapa prepara o repositório para a integração inicial com NVIDIA, mantendo voz, agentes, memória e MCP fora do escopo.
 
 ## Arquitetura atual
 
