@@ -126,9 +126,7 @@ function ProfileSection() {
 
 function ModelSection() {
   const models = [
-    { name: "Claude 3 Opus", desc: "Mais capaz para tarefas complexas", active: true },
-    { name: "Claude 3 Sonnet", desc: "Equilíbrio entre desempenho e velocidade", active: false },
-    { name: "Claude 3 Haiku", desc: "Mais rápido para respostas simples", active: false },
+    { name: "nvidia/nemotron-3-ultra-550b-a55b", desc: "Modelo NVIDIA definido em NVIDIA_MODEL", active: true },
   ]
   return (
     <div className="space-y-2">

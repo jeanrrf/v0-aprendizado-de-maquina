@@ -25,6 +25,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<{ id: string; role: "user" | "assistant"; content: string }[]>([])
   const [error, setError] = useState<string>()
   const [isLoading, setIsLoading] = useState(false)
+  const [modelName, setModelName] = useState("nvidia/nemotron-3-ultra-550b-a55b")
 
   async function sendMessage(message: string) {
     setError(undefined)
@@ -32,8 +33,9 @@ export default function ChatPage() {
     setIsLoading(true)
     try {
       const response = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message }) })
-      const data = (await response.json()) as { content?: string; error?: string }
+      const data = (await response.json()) as { content?: string; error?: string; model?: string }
       if (!response.ok || !data.content) throw new Error(data.error ?? "Não foi possível obter uma resposta.")
+      if (data.model) setModelName(data.model)
       setMessages((current) => [...current, { id: crypto.randomUUID(), role: "assistant", content: data.content! }])
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Ocorreu um erro inesperado.")
@@ -55,7 +57,7 @@ export default function ChatPage() {
         <Sidebar activeItem={active} onSelect={setActive} />
 
         <main className="flex flex-1 flex-col">
-          <ChatHeader title={titles[active]} showModelInfo={active === "chat"} />
+          <ChatHeader title={titles[active]} showModelInfo={active === "chat"} modelName={modelName} />
 
           <div key={active} className="flex flex-1 flex-col overflow-hidden duration-300 animate-in fade-in-50 slide-in-from-bottom-2">
             {active === "ainex" && <ResonanceField />}

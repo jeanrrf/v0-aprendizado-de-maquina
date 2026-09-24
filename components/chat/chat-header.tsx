@@ -5,9 +5,10 @@ import { ArrowLeft, MoreHorizontal } from "lucide-react"
 interface ChatHeaderProps {
   title: string
   showModelInfo?: boolean
+  modelName?: string
 }
 
-export function ChatHeader({ title, showModelInfo = false }: ChatHeaderProps) {
+export function ChatHeader({ title, showModelInfo = false, modelName = "nvidia/nemotron-3-ultra-550b-a55b" }: ChatHeaderProps) {
   return (
     <header className="flex h-14 items-center justify-between border-b border-border px-4">
       <div className="flex items-center gap-3">
@@ -21,7 +22,7 @@ export function ChatHeader({ title, showModelInfo = false }: ChatHeaderProps) {
         {showModelInfo && (
           <>
             <span className="hidden text-sm text-muted-foreground sm:inline">
-              Modelo: <span className="text-foreground">AINEX Neural</span>
+              Modelo: <span className="text-foreground">{modelName}</span>
             </span>
             <span className="hidden text-sm text-muted-foreground sm:inline">Responsivo</span>
           </>
