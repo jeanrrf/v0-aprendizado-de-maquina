@@ -1,0 +1,5 @@
+{
+  "name": "AINEX - Campo de Ressonância",
+  "description": "Interface visual da fundação AINEX para a futura camada de runtime.",
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
