@@ -25,7 +25,8 @@ Esta etapa prepara o repositório para a integração inicial com NVIDIA, manten
 
 ## Dependências
 
-Nenhuma dependência foi adicionada, removida ou atualizada. As dependências existentes continuam sustentando componentes instalados em `components/ui/`.
+- `@google/genai` e `firebase` permanecem declaradas no `package.json` e foram sincronizadas no `pnpm-lock.yaml` para que o deploy com `pnpm install --frozen-lockfile` seja reprodutível.
+- As demais dependências continuam sustentando os componentes instalados em `components/ui/`.
 
 ## Decisões pendentes antes da integração NVIDIA
 
