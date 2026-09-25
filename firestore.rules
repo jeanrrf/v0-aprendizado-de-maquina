@@ -23,6 +23,18 @@ service cloud.firestore {
           allow get, list, create, update, delete: if isOwner(userId);
         }
       }
+
+      match /files/{fileId} {
+        allow get, list, create, update, delete: if isOwner(userId);
+      }
+
+      match /searches/{searchId} {
+        allow get, list, create, update, delete: if isOwner(userId);
+      }
+
+      match /resonance/{resonanceId} {
+        allow get, list, create, update, delete: if isOwner(userId);
+      }
     }
   }
 }

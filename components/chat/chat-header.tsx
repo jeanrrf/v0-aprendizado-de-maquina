@@ -15,15 +15,15 @@ interface ChatHeaderProps {
 }
 
 const AVAILABLE_MODELS = [
-  { id: "meta/llama-3.2-11b-vision-instruct", label: "Llama 3.2 11B (NVIDIA)", tag: "Rápido" },
-  { id: "nvidia/nemotron-3-ultra-550b-a55b", label: "Nemotron 3 Ultra 550B", tag: "AINEX" },
-  { id: "nvidia/nemotron-3-super-120b-a12b", label: "Nemotron 3 Super 120B", tag: "NVIDIA" },
+  { id: "nvidia/nemotron-3-ultra-550b-a55b", label: "Nemotron 3 Ultra 550B (Bicameral)", tag: "550B Raciocínio" },
+  { id: "meta/llama-3.2-11b-vision-instruct", label: "Llama 3.2 11B Vision", tag: "Visão Rápida" },
+  { id: "meta/llama-3.2-90b-vision-instruct", label: "Llama 3.2 90B Vision", tag: "Visão Pro" },
 ]
 
 export function ChatHeader({
   title,
   showModelInfo = false,
-  modelName = "meta/llama-3.2-11b-vision-instruct",
+  modelName = "nvidia/nemotron-3-ultra-550b-a55b",
   onSelectModel,
   user,
   onSignIn,

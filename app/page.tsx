@@ -15,6 +15,7 @@ import {
   setDoc,
   addDoc,
   deleteDoc,
+  writeBatch,
   onSnapshot,
   query,
   orderBy,
@@ -25,12 +26,14 @@ import { NimParameters, DEFAULT_NIM_PARAMS } from "@/lib/nim-config"
 import { Sidebar } from "@/components/chat/sidebar"
 import { ChatHeader } from "@/components/chat/chat-header"
 import { ChatMessages } from "@/components/chat/chat-messages"
-import { ChatInput } from "@/components/chat/chat-input"
+import { ChatInput, ChatAttachment } from "@/components/chat/chat-input"
 import { MenuScreen, FirestoreConversation } from "@/components/chat/menu-screen"
 import { SearchScreen } from "@/components/chat/search-screen"
 import { FilesScreen } from "@/components/chat/files-screen"
 import { SettingsScreen } from "@/components/chat/settings-screen"
 import { ResonanceField } from "@/components/ainex/resonance-field"
+import { sanitizeAttachmentForFirestore } from "@/lib/multimodal/artifacts"
+import { conversationCache } from "@/lib/cache/lru-conversation-cache"
 
 const titles: Record<string, string> = {
   chat: "Chat com AINEX",
@@ -45,6 +48,8 @@ interface MessageItem {
   id: string
   role: "user" | "assistant"
   content: string
+  status?: "streaming" | "completed" | "error"
+  attachments?: ChatAttachment[]
 }
 
 async function parseSseStream(
@@ -87,6 +92,22 @@ async function parseSseStream(
     }
   }
 
+  if (buffer.trim()) {
+    const trimmed = buffer.trim()
+    if (trimmed.startsWith("data: ") && trimmed !== "data: [DONE]") {
+      try {
+        const parsed = JSON.parse(trimmed.slice(6))
+        const delta = parsed.choices?.[0]?.delta?.content
+        if (typeof delta === "string") {
+          accumulated += delta
+          onChunk(accumulated)
+        }
+      } catch {
+        // Ignora JSON parcial
+      }
+    }
+  }
+
   return accumulated
 }
 
@@ -96,9 +117,10 @@ export default function ChatPage() {
   const [conversations, setConversations] = useState<FirestoreConversation[]>([])
   const [activeConversationId, setActiveConversationId] = useState<string>("default")
   const [messages, setMessages] = useState<MessageItem[]>([])
+  const [activeStream, setActiveStream] = useState<{ conversationId: string; text: string } | null>(null)
   const [error, setError] = useState<string>()
   const [isLoading, setIsLoading] = useState(false)
-  const [modelName, setModelName] = useState("meta/llama-3.2-11b-vision-instruct")
+  const [modelName, setModelName] = useState("nvidia/nemotron-3-ultra-550b-a55b")
   const [nimParams, setNimParams] = useState<NimParameters>(DEFAULT_NIM_PARAMS)
 
   // Monitor Authentication State
@@ -106,6 +128,9 @@ export default function ChatPage() {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser)
       if (currentUser) {
+        // Hidratação prévia do cache LRU local (0ms warm boot)
+        conversationCache.hydrateFromStorage(currentUser.uid)
+
         const userRef = doc(db, "users", currentUser.uid)
         try {
           await setDoc(
@@ -146,6 +171,7 @@ export default function ChatPage() {
           title: d.data().title || "Conversa sem título",
           preview: d.data().preview || "",
           model: d.data().model || "",
+          status: d.data().status || "idle",
           updatedAt: d.data().updatedAt,
         }))
         setConversations(list)
@@ -165,10 +191,19 @@ export default function ChatPage() {
     return () => unsubscribe()
   }, [user])
 
-  // Listen to Messages of Active Conversation in Firestore
+  // Listen to Messages of Active Conversation in Firestore with LRU Cache Layer
   useEffect(() => {
     if (!user || !activeConversationId || activeConversationId === "default") {
+      setMessages([])
       return
+    }
+
+    // Camada de Cache LRU: Tenta recuperar o histórico em memória antes da resposta de rede (0ms render)
+    const cached = conversationCache.get(activeConversationId)
+    if (cached && cached.length > 0) {
+      setMessages(cached)
+    } else {
+      setMessages([])
     }
 
     const msgPath = `users/${user.uid}/conversations/${activeConversationId}/messages`
@@ -191,9 +226,13 @@ export default function ChatPage() {
               id: d.id,
               role: d.data().role,
               content: d.data().content,
+              status: d.data().status || "completed",
+              attachments: d.data().attachments,
             } as MessageItem)
         )
+        // Atualiza estado e sincroniza a camada LRU
         setMessages(msgs)
+        conversationCache.set(activeConversationId, msgs, user.uid)
       },
       (err) => {
         handleFirestoreError(err, OperationType.LIST, msgPath)
@@ -233,6 +272,9 @@ export default function ChatPage() {
 
   const handleSignOut = async () => {
     try {
+      if (user?.uid) {
+        conversationCache.clear(user.uid)
+      }
       await signOut(auth)
       setMessages([])
       setConversations([])
@@ -249,16 +291,18 @@ export default function ChatPage() {
     }
 
     try {
-      const convRef = collection(db, "users", user.uid, "conversations")
-      const newDoc = await addDoc(convRef, {
+      const newDoc = doc(collection(db, "users", user.uid, "conversations"))
+      const newId = newDoc.id
+      await setDoc(newDoc, {
         title: "Nova conversa",
         preview: "Iniciada agora...",
         model: modelName,
+        status: "idle",
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
-      setActiveConversationId(newDoc.id)
       setMessages([])
+      setActiveConversationId(newId)
       setActive("chat")
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, `users/${user.uid}/conversations`)
@@ -268,11 +312,15 @@ export default function ChatPage() {
   const handleDeleteConversation = async (convId: string) => {
     if (!user) return
     try {
+      conversationCache.delete(convId, user.uid)
       await deleteDoc(doc(db, "users", user.uid, "conversations", convId))
       if (activeConversationId === convId) {
         const remaining = conversations.filter((c) => c.id !== convId)
         if (remaining.length > 0) {
-          setActiveConversationId(remaining[0].id)
+          const nextId = remaining[0].id
+          const cached = conversationCache.get(nextId)
+          setMessages(cached || [])
+          setActiveConversationId(nextId)
         } else {
           setActiveConversationId("default")
           setMessages([])
@@ -284,29 +332,50 @@ export default function ChatPage() {
   }
 
   const handleSelectConversation = (convId: string) => {
-    setActiveConversationId(convId)
+    if (convId !== activeConversationId) {
+      // 0ms instant transition via LRU Cache
+      const cached = conversationCache.get(convId)
+      if (cached && cached.length > 0) {
+        setMessages(cached)
+      } else {
+        setMessages([])
+      }
+      setActiveConversationId(convId)
+    }
     setActive("chat")
   }
 
-  async function sendMessage(messageText: string) {
+  async function sendMessage(messageText: string, attachments: ChatAttachment[] = []) {
     setError(undefined)
-    setIsLoading(true)
 
     const userMessageId = crypto.randomUUID()
     const assistantMessageId = crypto.randomUUID()
 
-    // Histórico de contexto para a NVIDIA NIM
-    const conversationHistory = messages.slice(-8).map((m) => ({
+    // Histórico de contexto para a NVIDIA NIM (preservando anexos visuais e documentais)
+    const conversationHistory = messages.slice(-10).map((m) => ({
       role: m.role,
       content: m.content,
+      attachments: m.attachments?.map((a) => ({
+        id: a.id,
+        name: a.name,
+        type: a.type,
+        mimeType: a.mimeType,
+        url: a.url,
+        content: a.content,
+      })),
     }))
 
-    // MODO VISITANTE (sem Firestore)
+    // MODO VISITANTE (sem login)
     if (!user) {
-      setMessages((prev) => [...prev, { id: userMessageId, role: "user", content: messageText }])
+      setIsLoading(true)
+      const targetConvId = "default"
+      setMessages((prev) => [
+        ...prev,
+        { id: userMessageId, role: "user", content: messageText, attachments, status: "completed" },
+      ])
 
       if (nimParams.stream) {
-        setMessages((prev) => [...prev, { id: assistantMessageId, role: "assistant", content: "" }])
+        setActiveStream({ conversationId: targetConvId, text: "" })
 
         try {
           const res = await fetch("/api/chat", {
@@ -314,6 +383,7 @@ export default function ChatPage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               message: messageText,
+              attachments,
               model: modelName,
               stream: true,
               temperature: nimParams.temperature,
@@ -330,15 +400,22 @@ export default function ChatPage() {
             throw new Error(errData.error || `Erro NIM ${res.status}`)
           }
 
-          await parseSseStream(res, (currentText) => {
-            setMessages((prev) =>
-              prev.map((m) => (m.id === assistantMessageId ? { ...m, content: currentText } : m))
+          const fullText = await parseSseStream(res, (currentText) => {
+            setActiveStream((curr) =>
+              curr && curr.conversationId === targetConvId
+                ? { ...curr, text: currentText }
+                : curr
             )
           })
+
+          setMessages((prev) => [
+            ...prev,
+            { id: assistantMessageId, role: "assistant", content: fullText, status: "completed" },
+          ])
         } catch (cause) {
           setError(cause instanceof Error ? cause.message : "Erro de conexão com a NVIDIA.")
-          setMessages((prev) => prev.filter((m) => m.id !== assistantMessageId))
         } finally {
+          setActiveStream(null)
           setIsLoading(false)
         }
         return
@@ -351,6 +428,7 @@ export default function ChatPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             message: messageText,
+            attachments,
             model: modelName,
             stream: false,
             temperature: nimParams.temperature,
@@ -363,7 +441,7 @@ export default function ChatPage() {
         if (!res.ok || !data.content) throw new Error(data.error || "Erro ao responder.")
         setMessages((prev) => [
           ...prev,
-          { id: assistantMessageId, role: "assistant", content: data.content },
+          { id: assistantMessageId, role: "assistant", content: data.content, status: "completed" },
         ])
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : "Erro desconhecido.")
@@ -373,45 +451,94 @@ export default function ChatPage() {
       return
     }
 
-    // MODO PERSISTIDO NO FIRESTORE
-    const conversationId = activeConversationId === "default" ? "default" : activeConversationId
+    // MODO PERSISTIDO NO FIRESTORE (TRANSAÇÃO ATÔMICA COM WRITEBATCH)
+    let targetConversationId = activeConversationId
+    if (!targetConversationId || targetConversationId === "default") {
+      const newConvRef = doc(collection(db, "users", user.uid, "conversations"))
+      targetConversationId = newConvRef.id
+      setActiveConversationId(targetConversationId)
+    }
+
+    const convRef = doc(db, "users", user.uid, "conversations", targetConversationId)
+    const userMsgRef = doc(
+      db,
+      "users",
+      user.uid,
+      "conversations",
+      targetConversationId,
+      "messages",
+      userMessageId
+    )
+    const assistantMsgRef = doc(
+      db,
+      "users",
+      user.uid,
+      "conversations",
+      targetConversationId,
+      "messages",
+      assistantMessageId
+    )
+
+    const isFirstMsg = messages.length === 0
+    const previewText =
+      messageText || (attachments[0]?.name ? `[Anexo: ${attachments[0].name}]` : "Nova conversa")
+    const newTitle = isFirstMsg ? previewText.slice(0, 45) : undefined
+
+    setIsLoading(true)
 
     try {
-      const convRef = doc(db, "users", user.uid, "conversations", conversationId)
-      const isFirstMsg = messages.length === 0
-      const newTitle = isFirstMsg ? messageText.slice(0, 45) : undefined
+      // 1. Gravação ATÔMICA da mensagem do usuário e atualização de estado da conversa
+      const userBatch = writeBatch(db)
 
-      await setDoc(
+      userBatch.set(userMsgRef, {
+        id: userMessageId,
+        role: "user",
+        content: messageText,
+        status: "completed",
+        attachments: attachments.map(sanitizeAttachmentForFirestore),
+        createdAt: serverTimestamp(),
+      })
+
+      userBatch.set(
         convRef,
         {
           ...(newTitle ? { title: newTitle } : {}),
-          preview: messageText.slice(0, 80),
+          preview: previewText.slice(0, 80),
           model: modelName,
+          status: nimParams.stream ? "streaming" : "idle",
           updatedAt: serverTimestamp(),
           createdAt: serverTimestamp(),
         },
         { merge: true }
       )
 
-      const messagesRef = collection(db, "users", user.uid, "conversations", conversationId, "messages")
-      await addDoc(messagesRef, {
-        role: "user",
-        content: messageText,
-        createdAt: serverTimestamp(),
-      })
+      await userBatch.commit()
+
+      // Espelhamento assíncrono para a biblioteca da aba Arquivos
+      for (const att of attachments) {
+        if (!att.id.startsWith("cloud-")) {
+          addDoc(collection(db, "users", user.uid, "files"), {
+            name: att.name,
+            type: att.type,
+            mimeType: att.mimeType,
+            sizeBytes: att.sizeBytes || 0,
+            sizeFormatted: att.sizeFormatted,
+            content: att.content || att.url || null,
+            createdAt: serverTimestamp(),
+          }).catch((e) => console.warn("Could not mirror file:", e))
+        }
+      }
 
       if (nimParams.stream) {
-        // Inicializa placeholder para renderização token-a-token
-        setMessages((prev) => [
-          ...prev,
-          { id: assistantMessageId, role: "assistant", content: "" },
-        ])
+        // Inicializa projeção associada EXCLUSIVAMENTE a este targetConversationId
+        setActiveStream({ conversationId: targetConversationId, text: "" })
 
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             message: messageText,
+            attachments,
             model: modelName,
             stream: true,
             temperature: nimParams.temperature,
@@ -429,33 +556,47 @@ export default function ChatPage() {
         }
 
         const fullText = await parseSseStream(response, (currentText) => {
-          setMessages((prev) =>
-            prev.map((m) => (m.id === assistantMessageId ? { ...m, content: currentText } : m))
+          setActiveStream((curr) =>
+            curr && curr.conversationId === targetConversationId
+              ? { ...curr, text: currentText }
+              : curr
           )
         })
 
-        // Persiste a resposta final no Firestore
-        await addDoc(messagesRef, {
+        // 2. Gravação ATÔMICA da resposta final e transição para "completed"
+        const assistantBatch = writeBatch(db)
+
+        assistantBatch.set(assistantMsgRef, {
+          id: assistantMessageId,
           role: "assistant",
           content: fullText,
+          status: "completed",
           createdAt: serverTimestamp(),
         })
 
-        await setDoc(
+        assistantBatch.set(
           convRef,
           {
             preview: fullText.slice(0, 80),
             model: modelName,
+            status: "completed",
             updatedAt: serverTimestamp(),
           },
           { merge: true }
         )
+
+        await assistantBatch.commit()
+
+        // Libera stream ativo se ainda corresponder a esta conversa
+        setActiveStream((curr) => (curr?.conversationId === targetConversationId ? null : curr))
       } else {
+        // Modo não-streaming
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             message: messageText,
+            attachments,
             model: modelName,
             stream: false,
             temperature: nimParams.temperature,
@@ -470,25 +611,38 @@ export default function ChatPage() {
           throw new Error(data.error ?? "Não foi possível obter uma resposta da IA.")
         }
 
-        await addDoc(messagesRef, {
+        const assistantBatch = writeBatch(db)
+        assistantBatch.set(assistantMsgRef, {
+          id: assistantMessageId,
           role: "assistant",
           content: data.content,
+          status: "completed",
           createdAt: serverTimestamp(),
         })
 
-        await setDoc(
+        assistantBatch.set(
           convRef,
           {
             preview: data.content.slice(0, 80),
             model: data.model || modelName,
+            status: "completed",
             updatedAt: serverTimestamp(),
           },
           { merge: true }
         )
+
+        await assistantBatch.commit()
       }
     } catch (cause) {
       console.error("Chat & Firestore error:", cause)
       setError(cause instanceof Error ? cause.message : "Ocorreu um erro ao processar sua mensagem.")
+
+      // Atualiza status de erro na conversa de forma atômica
+      try {
+        await setDoc(convRef, { status: "error", updatedAt: serverTimestamp() }, { merge: true })
+      } catch {}
+
+      setActiveStream((curr) => (curr?.conversationId === targetConversationId ? null : curr))
     } finally {
       setIsLoading(false)
     }
@@ -514,7 +668,7 @@ export default function ChatPage() {
           onSignOut={handleSignOut}
         />
 
-        <main className="flex flex-1 flex-col overflow-hidden">
+        <main className="flex flex-1 min-h-0 flex-col overflow-hidden">
           <ChatHeader
             title={titles[active] || "AINEX"}
             showModelInfo={active === "chat"}
@@ -526,15 +680,30 @@ export default function ChatPage() {
 
           <div
             key={active}
-            className="flex flex-1 flex-col overflow-hidden duration-200 animate-in fade-in-50"
+            className="flex flex-1 min-h-0 flex-col overflow-hidden duration-200 animate-in fade-in-50"
           >
             {active === "chat" && (
-              <>
-                <ChatMessages messages={messages} error={error} />
-                <ChatInput onSubmit={sendMessage} isLoading={isLoading} />
-              </>
+              <div className="flex flex-1 flex-grow min-h-0 flex-col overflow-hidden">
+                <ChatMessages
+                  messages={messages}
+                  error={error}
+                  isLoading={isLoading && activeStream?.conversationId === activeConversationId}
+                  streamingText={
+                    activeStream?.conversationId === activeConversationId
+                      ? activeStream.text
+                      : null
+                  }
+                  modelName={modelName}
+                  onSelectPrompt={(p) => sendMessage(p)}
+                />
+                <ChatInput
+                  onSubmit={sendMessage}
+                  isLoading={isLoading}
+                  user={user}
+                />
+              </div>
             )}
-            {active === "ainex" && <ResonanceField />}
+            {active === "ainex" && <ResonanceField user={user} />}
             {active === "menu" && (
               <MenuScreen
                 conversations={conversations}
@@ -546,14 +715,22 @@ export default function ChatPage() {
                 onSignIn={handleSignIn}
               />
             )}
-            {active === "search" && <SearchScreen />}
-            {active === "files" && <FilesScreen />}
+            {active === "search" && (
+              <SearchScreen
+                user={user}
+                onSignIn={handleSignIn}
+                onSelectConversation={handleSelectConversation}
+              />
+            )}
+            {active === "files" && <FilesScreen user={user} onSignIn={handleSignIn} />}
             {active === "settings" && (
               <SettingsScreen
                 currentModel={modelName}
                 onSelectModel={setModelName}
                 nimParams={nimParams}
                 onChangeNimParams={setNimParams}
+                user={user}
+                onSignIn={handleSignIn}
               />
             )}
           </div>
