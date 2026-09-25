@@ -1,7 +1,10 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Zap, Hand, Activity, Waves } from "lucide-react"
+import { Zap, Activity, Waves, Database } from "lucide-react"
+import { User } from "firebase/auth"
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore"
+import { db } from "@/lib/firebase"
 import { cn } from "@/lib/utils"
 
 type FieldStatus = "idle" | "tuning" | "resonance"
@@ -24,7 +27,11 @@ interface Burst {
   t: number
 }
 
-export function ResonanceField() {
+interface ResonanceFieldProps {
+  user?: User | null
+}
+
+export function ResonanceField({ user }: ResonanceFieldProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
 
@@ -32,8 +39,66 @@ export function ResonanceField() {
   const [charge, setCharge] = useState(0)
   const [sync, setSync] = useState(0)
   const [pulses, setPulses] = useState(0)
+  const [persistedInCloud, setPersistedInCloud] = useState(false)
 
   const readout = useRef({ status: "idle" as FieldStatus, charge: 0, sync: 0, pulses: 0 })
+  const lastSavedPulses = useRef(0)
+
+  // Carrega telemetria persistida no Firestore
+  useEffect(() => {
+    if (!user) return
+    let active = true
+
+    async function loadTelemetry() {
+      try {
+        const snap = await getDoc(doc(db, "users", user!.uid, "resonance", "telemetry"))
+        if (snap.exists() && active) {
+          const data = snap.data()
+          if (typeof data.pulses === "number") {
+            readout.current.pulses = data.pulses
+            lastSavedPulses.current = data.pulses
+            setPulses(data.pulses)
+          }
+          setPersistedInCloud(true)
+        }
+      } catch (err) {
+        console.warn("Could not load resonance telemetry:", err)
+      }
+    }
+
+    loadTelemetry()
+    return () => {
+      active = false
+    }
+  }, [user])
+
+  // Salva periodicamente a telemetria no Firestore quando há pulsos ou atividade
+  useEffect(() => {
+    if (!user) return
+    const interval = setInterval(async () => {
+      if (readout.current.pulses !== lastSavedPulses.current) {
+        lastSavedPulses.current = readout.current.pulses
+        try {
+          await setDoc(
+            doc(db, "users", user.uid, "resonance", "telemetry"),
+            {
+              pulses: readout.current.pulses,
+              charge: readout.current.charge,
+              sync: readout.current.sync,
+              status: readout.current.status,
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          )
+          setPersistedInCloud(true)
+        } catch (err) {
+          console.warn("Could not sync resonance telemetry to Firestore:", err)
+        }
+      }
+    }, 2000)
+
+    return () => clearInterval(interval)
+  }, [user])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -58,34 +123,40 @@ export function ResonanceField() {
     const ro = new ResizeObserver(resize)
     ro.observe(wrap)
 
-    const rgba = (a: number) => `rgba(225, 29, 72, ${a})`
+    let energy = 0.22
+    let chargeVal = 0
+    let resonanceTimer = 0
+    let pulseCount = readout.current.pulses
 
-    // Pointer state
-    const pointer = { x: w / 2, y: h / 2, tx: w / 2, ty: h / 2, engaged: false, pressed: false, speed: 0 }
-    let lastPx = w / 2
-    let lastPy = h / 2
-
-    const setPointer = (clientX: number, clientY: number) => {
-      const rect = canvas.getBoundingClientRect()
-      pointer.tx = clientX - rect.left
-      pointer.ty = clientY - rect.top
+    const pointer = {
+      x: w / 2,
+      y: h / 2,
+      targetX: w / 2,
+      targetY: h / 2,
+      vx: 0,
+      vy: 0,
+      speed: 0,
+      engaged: false,
+      down: false,
     }
 
     const onMove = (e: PointerEvent) => {
-      setPointer(e.clientX, e.clientY)
+      const rect = canvas.getBoundingClientRect()
+      pointer.targetX = e.clientX - rect.left
+      pointer.targetY = e.clientY - rect.top
       pointer.engaged = true
     }
     const onDown = (e: PointerEvent) => {
-      setPointer(e.clientX, e.clientY)
+      pointer.down = true
       pointer.engaged = true
-      pointer.pressed = true
+      onMove(e)
     }
     const onUp = () => {
-      pointer.pressed = false
+      pointer.down = false
     }
     const onLeave = () => {
       pointer.engaged = false
-      pointer.pressed = false
+      pointer.down = false
     }
 
     canvas.addEventListener("pointermove", onMove)
@@ -93,60 +164,48 @@ export function ResonanceField() {
     window.addEventListener("pointerup", onUp)
     canvas.addEventListener("pointerleave", onLeave)
 
-    const nodes: Node[] = []
-    const nodeCount = 18
-    for (let i = 0; i < nodeCount; i++) {
-      nodes.push({
-        angle: Math.random() * Math.PI * 2,
-        radius: 0.55 + Math.random() * 0.9,
-        speed: (0.002 + Math.random() * 0.005) * (Math.random() > 0.5 ? 1 : -1),
-        phase: Math.random() * Math.PI * 2,
-      })
-    }
+    const nodes: Node[] = Array.from({ length: 9 }, (_, i) => ({
+      angle: (i / 9) * Math.PI * 2,
+      radius: 0.82 + Math.sin(i * 1.3) * 0.18,
+      speed: 0.008 + (i % 3) * 0.003,
+      phase: i * 0.7,
+    }))
 
-    const flows: Flow[] = []
-    for (let i = 0; i < 18; i++) {
-      flows.push({
-        t: Math.random(),
-        speed: 0.012 + Math.random() * 0.02,
-        lateral: (Math.random() - 0.5) * 2,
-        surface: Math.random() * Math.PI * 2,
-      })
-    }
+    const flows: Flow[] = Array.from({ length: 18 }, (_, i) => ({
+      t: Math.random(),
+      speed: 0.012 + Math.random() * 0.018,
+      lateral: (Math.random() - 0.5) * 1.2,
+      surface: (i / 18) * Math.PI * 2,
+    }))
 
     const bursts: Burst[] = []
 
-    let t = 0
     let raf = 0
+    let lastT = performance.now()
     let frame = 0
-    let chargeVal = 0
-    let resonanceTimer = 0
-    let leanX = 0
-    let leanY = 0
-    let energy = 0.22
-    let pulseCount = 0
 
-    const draw = () => {
-      t += 0.016
+    const rgba = (a: number) => `rgba(235, 30, 45, ${Math.max(0, Math.min(1, a))})`
+
+    const draw = (now: number) => {
       frame++
+      const dt = Math.min((now - lastT) / 1000, 0.05)
+      lastT = now
+      const t = now * 0.001
+
+      const pSmooth = 0.18
+      const dx = pointer.targetX - pointer.x
+      const dy = pointer.targetY - pointer.y
+      pointer.x += dx * pSmooth
+      pointer.y += dy * pSmooth
+      pointer.speed = Math.hypot(dx, dy)
 
       const cxBase = w / 2
       const cyBase = h / 2
-      const R = Math.min(w, h)
-      const coreBase = R * 0.12
+      const R = Math.min(w, h) * 0.42
+      const coreBase = R * 0.19
 
-      pointer.x += (pointer.tx - pointer.x) * 0.18
-      pointer.y += (pointer.ty - pointer.y) * 0.18
-      const pvx = pointer.x - lastPx
-      const pvy = pointer.y - lastPy
-      pointer.speed = Math.hypot(pvx, pvy)
-      lastPx = pointer.x
-      lastPy = pointer.y
-
-      const targetLeanX = pointer.engaged ? (pointer.x - cxBase) * 0.08 : 0
-      const targetLeanY = pointer.engaged ? (pointer.y - cyBase) * 0.08 : 0
-      leanX += (targetLeanX - leanX) * 0.06
-      leanY += (targetLeanY - leanY) * 0.06
+      const leanX = pointer.engaged ? (pointer.x - cxBase) * 0.06 : 0
+      const leanY = pointer.engaged ? (pointer.y - cyBase) * 0.06 : 0
       const cx = cxBase + leanX
       const cy = cyBase + leanY
 
@@ -188,7 +247,7 @@ export function ResonanceField() {
       const aura = ctx.createRadialGradient(cx, cy, Math.max(1, coreR * 0.4), cx, cy, Math.max(2, auraR))
       aura.addColorStop(0, rgba(0.28 + energy * 0.25 + flash * 0.2))
       aura.addColorStop(0.5, rgba(0.1 + energy * 0.08))
-      aura.addColorStop(1, rgba(0))
+      aura.addColorStop(1, "rgba(235, 30, 45, 0)")
       ctx.fillStyle = aura
       ctx.beginPath()
       ctx.arc(cx, cy, auraR, 0, Math.PI * 2)
@@ -300,52 +359,47 @@ export function ResonanceField() {
   }, [])
 
   const statusLabel =
-    status === "resonance" ? "Ressonância atingida" : status === "tuning" ? "Sintonizando" : "Em repouso"
+    status === "resonance"
+      ? "Ressonância Neural Ativa"
+      : status === "tuning"
+      ? "Sintonizando Campo"
+      : "Aguardando Interação"
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-      <div className="mx-auto flex max-w-5xl flex-col gap-4">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <Waves className="h-4 w-4 text-primary" />
-            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Campo de Ressonância Neural
-            </span>
+    <div className="flex-1 overflow-y-auto p-6">
+      <div className="mx-auto flex max-w-4xl flex-col gap-6">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-foreground">Campo de Ressonância AINEX</h1>
+            <p className="text-xs text-muted-foreground">
+              Simulação neural interativa com persistência de telemetria no Firestore
+            </p>
           </div>
-          <h1 className="text-balance text-2xl font-semibold text-foreground sm:text-3xl">
-            Sintonize a AINEX com o seu toque
-          </h1>
-          <p className="max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground">
-            Arraste sobre o campo para criar canais de energia até o núcleo da esfera.
-          </p>
-        </div>
-
-        <div className="relative overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-          <div className="pointer-events-none absolute left-4 top-4 z-10 flex items-center gap-2 rounded-full border border-border bg-background/70 px-3 py-1.5 backdrop-blur-sm">
+          <div className="flex items-center gap-2">
             <span
               className={cn(
-                "h-1.5 w-1.5 rounded-full transition-colors",
-                status === "idle" ? "bg-muted-foreground" : "animate-pulse bg-primary",
+                "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border transition-colors",
+                status === "resonance"
+                  ? "border-primary bg-primary/20 text-primary animate-pulse"
+                  : status === "tuning"
+                  ? "border-amber-500/40 bg-amber-500/10 text-amber-400"
+                  : "border-border bg-card text-muted-foreground"
               )}
-            />
-            <span className="text-xs font-medium text-foreground">{statusLabel}</span>
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-current" />
+              {statusLabel}
+            </span>
+            {user && persistedInCloud && (
+              <span className="hidden sm:inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-400">
+                <Database className="h-3 w-3" />
+                <span>Sincronizado</span>
+              </span>
+            )}
           </div>
+        </div>
 
-          <div className="pointer-events-none absolute right-4 top-4 z-10 flex items-center gap-1.5 rounded-full border border-border bg-background/70 px-3 py-1.5 backdrop-blur-sm">
-            <Zap className={cn("h-3.5 w-3.5", charge > 0 ? "text-primary" : "text-muted-foreground")} />
-            <span className="text-xs font-medium tabular-nums text-foreground">{charge}%</span>
-          </div>
-
-          {status === "idle" && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex justify-center">
-              <div className="flex items-center gap-2 rounded-full border border-border bg-background/70 px-3 py-1.5 backdrop-blur-sm animate-in fade-in-50">
-                <Hand className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">Toque e arraste para interagir</span>
-              </div>
-            </div>
-          )}
-
-          <div ref={wrapRef} className="relative h-[300px] w-full sm:h-[380px]">
+        <div className="relative aspect-video w-full overflow-hidden rounded-2xl border border-border bg-black/40 shadow-inner">
+          <div ref={wrapRef} className="absolute inset-0">
             <canvas
               ref={canvasRef}
               role="img"
@@ -358,7 +412,7 @@ export function ResonanceField() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Metric icon={Zap} label="Carga de ressonância" value={`${charge}%`} progress={charge} />
           <Metric icon={Activity} label="Sincronia neural" value={`${sync}%`} progress={sync} />
-          <Metric icon={Waves} label="Pulsos emitidos" value={String(pulses)} />
+          <Metric icon={Waves} label="Pulsos emitidos (Firestore)" value={String(pulses)} />
         </div>
       </div>
     </div>

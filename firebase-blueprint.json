@@ -2,7 +2,7 @@
   "entities": {
     "User": {
       "title": "User",
-      "description": "Perfil do usuário autenticado no sistema AINEX",
+      "description": "Perfil e preferências do usuário persistidas no Firestore",
       "type": "object",
       "properties": {
         "email": {
@@ -18,10 +18,23 @@
           "type": "string",
           "description": "URL da foto de perfil do usuário"
         },
+        "statusTitle": {
+          "type": "string",
+          "description": "Título ou status do operador AINEX"
+        },
+        "preferredModel": {
+          "type": "string",
+          "description": "Modelo NVIDIA NIM selecionado pelo usuário"
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time",
           "description": "Data e hora de criação do perfil"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data e hora de atualização do perfil"
         }
       },
       "required": ["email", "createdAt"]
@@ -39,6 +52,15 @@
         "model": {
           "type": "string",
           "description": "Nome do modelo de IA utilizado"
+        },
+        "preview": {
+          "type": "string",
+          "description": "Prévia textual da última mensagem"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["idle", "streaming", "completed", "error"],
+          "description": "Estado do ciclo de vida da conversa"
         },
         "createdAt": {
           "type": "string",
@@ -68,6 +90,15 @@
           "description": "Texto da mensagem",
           "maxLength": 50000
         },
+        "status": {
+          "type": "string",
+          "enum": ["streaming", "completed", "error"],
+          "description": "Estado atômico da mensagem"
+        },
+        "attachments": {
+          "type": "array",
+          "description": "Lista de fotos ou arquivos anexados à mensagem"
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time",
@@ -75,12 +106,96 @@
         }
       },
       "required": ["role", "content", "createdAt"]
+    },
+    "UserFile": {
+      "title": "UserFile",
+      "description": "Arquivo enviado e armazenado pelo usuário no Firestore",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Nome do arquivo com extensão"
+        },
+        "type": {
+          "type": "string",
+          "description": "Categoria do arquivo: pdf, image, code, doc"
+        },
+        "mimeType": {
+          "type": "string",
+          "description": "MIME type original do arquivo"
+        },
+        "sizeBytes": {
+          "type": "number",
+          "description": "Tamanho do arquivo em bytes"
+        },
+        "sizeFormatted": {
+          "type": "string",
+          "description": "Tamanho legível do arquivo"
+        },
+        "content": {
+          "type": "string",
+          "description": "Conteúdo textual ou base64 do arquivo"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp de upload"
+        }
+      },
+      "required": ["name", "type", "createdAt"]
+    },
+    "SearchItem": {
+      "title": "SearchItem",
+      "description": "Histórico de termos pesquisados pelo usuário",
+      "type": "object",
+      "properties": {
+        "term": {
+          "type": "string",
+          "description": "Termo buscado",
+          "maxLength": 100
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp da pesquisa"
+        }
+      },
+      "required": ["term", "createdAt"]
+    },
+    "ResonanceTelemetry": {
+      "title": "ResonanceTelemetry",
+      "description": "Dados de telemetria e sincronização neural da aba AINEX",
+      "type": "object",
+      "properties": {
+        "charge": {
+          "type": "number",
+          "description": "Carga energética neural (0 a 100)"
+        },
+        "sync": {
+          "type": "number",
+          "description": "Taxa de sincronismo neural (0 a 100)"
+        },
+        "pulses": {
+          "type": "number",
+          "description": "Total de pulsos emitidos"
+        },
+        "status": {
+          "type": "string",
+          "description": "Estado do campo: idle, tuning, resonance"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp da última medição"
+        }
+      },
+      "required": ["status", "updatedAt"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": "User",
-      "description": "Documento do perfil de cada usuário"
+      "description": "Perfil e configurações de cada usuário"
     },
     "/users/{userId}/conversations/{conversationId}": {
       "schema": "Conversation",
@@ -89,6 +204,18 @@
     "/users/{userId}/conversations/{conversationId}/messages/{messageId}": {
       "schema": "Message",
       "description": "Histórico de mensagens da conversa"
+    },
+    "/users/{userId}/files/{fileId}": {
+      "schema": "UserFile",
+      "description": "Arquivos reais carregados pelo usuário"
+    },
+    "/users/{userId}/searches/{searchId}": {
+      "schema": "SearchItem",
+      "description": "Termos recentes de pesquisa do usuário"
+    },
+    "/users/{userId}/resonance/{resonanceId}": {
+      "schema": "ResonanceTelemetry",
+      "description": "Histórico e estado do campo de ressonância AINEX"
     }
   }
 }
