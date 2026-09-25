@@ -1,0 +1,94 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Perfil do usuário autenticado no sistema AINEX",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Endereço de e-mail do usuário"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Nome de exibição do usuário"
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "URL da foto de perfil do usuário"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data e hora de criação do perfil"
+        }
+      },
+      "required": ["email", "createdAt"]
+    },
+    "Conversation": {
+      "title": "Conversation",
+      "description": "Sessão de conversa persistida com IA",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Título ou resumo da conversa",
+          "maxLength": 200
+        },
+        "model": {
+          "type": "string",
+          "description": "Nome do modelo de IA utilizado"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp de início da conversa"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp da última mensagem ou modificação"
+        }
+      },
+      "required": ["title", "createdAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Mensagem individual dentro de uma conversa",
+      "type": "object",
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": ["user", "assistant"],
+          "description": "Papel do emissor da mensagem"
+        },
+        "content": {
+          "type": "string",
+          "description": "Texto da mensagem",
+          "maxLength": 50000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp da mensagem"
+        }
+      },
+      "required": ["role", "content", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Documento do perfil de cada usuário"
+    },
+    "/users/{userId}/conversations/{conversationId}": {
+      "schema": "Conversation",
+      "description": "Conversas pertencentes a um usuário específico"
+    },
+    "/users/{userId}/conversations/{conversationId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Histórico de mensagens da conversa"
+    }
+  }
+}

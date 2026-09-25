@@ -90,3 +90,7 @@
     @apply bg-background text-foreground;
   }
 }
+
+nextjs-portal {
+  pointer-events: none !important;
+}
