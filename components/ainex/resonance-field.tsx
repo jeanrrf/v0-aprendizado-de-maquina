@@ -188,7 +188,6 @@ export function ResonanceField({ user }: ResonanceFieldProps) {
 
     const draw = (now: number) => {
       frame++
-      const dt = Math.min((now - lastT) / 1000, 0.05)
       lastT = now
       const t = now * 0.001
 

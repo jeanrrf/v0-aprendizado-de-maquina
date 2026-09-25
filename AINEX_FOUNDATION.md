@@ -18,10 +18,18 @@ Esta etapa prepara o repositório para a integração inicial com NVIDIA, manten
 
 ## Limpeza realizada
 
-- Removido `components/ainex/neural-console.tsx`, que não tinha consumidores.
-- Removido `components/ui/use-toast.ts`, duplicata não referenciada; `hooks/use-toast.ts` permanece como implementação consumida pelo toaster.
-- Removido `styles/globals.css`, folha global duplicada e não importada; `app/globals.css` é a única fonte global.
-- Corrigidos título, descrição e idioma do layout para refletir a aplicação atual.
+- Removido `components/ui/use-mobile.tsx` (duplicata legada de `hooks/use-mobile.ts`).
+- Removido `components/theme-provider.tsx` (componente não referenciado).
+- Removido `hooks/use-toast.ts`, `hooks/use-mobile.ts` e diretório `hooks/` órfãos.
+- Removido `components/ui/` com 54 componentes não utilizados provenientes de scaffolding inicial (mantendo `.gitkeep` para suporte do `components.json`).
+- Removidos 5 ativos de imagem placeholder não utilizados em `public/` (`placeholder-logo.png`, `placeholder-logo.svg`, `placeholder-user.jpg`, `placeholder.jpg`, `placeholder.svg`).
+- Removidos `bun.lock` e `tsconfig.tsbuildinfo`, adicionando-os ao `.gitignore`.
+- Removido `components/ainex/neural-console.tsx` e `styles/globals.css`.
+- Corrigida tipagem e constante redundante `DEFAULTNIM_PARAMS` em `settings-screen.tsx`.
+- Otimizado loop de renderização do `ResonanceField`, removendo variáveis não utilizadas.
+- Adicionada sanitização segura de anexos no espelhamento do Firestore para respeitar limites de 1MB por documento.
+- Adicionada resiliência dual em `app/api/chat/route.ts` integrando NVIDIA NIM como motor neural primário e `@google/genai` (Gemini 2.5) como runtime compatível.
+
 
 ## Dependências
 

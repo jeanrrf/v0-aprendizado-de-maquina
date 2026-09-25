@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { GoogleGenAI } from "@google/genai"
 import {
   formatCodeArtifact,
   formatDocumentArtifact,
@@ -46,9 +47,11 @@ export async function POST(request: Request) {
   }
 
   const apiKey = process.env.NVIDIA_API_KEY
-  if (!apiKey) {
+  const geminiKey = process.env.GEMINI_API_KEY
+
+  if (!apiKey && !geminiKey) {
     return NextResponse.json(
-      { error: "NVIDIA_API_KEY não configurada no servidor." },
+      { error: "Nenhuma chave de API configurada no servidor (NVIDIA_API_KEY ou GEMINI_API_KEY)." },
       { status: 500 }
     )
   }
@@ -71,7 +74,7 @@ export async function POST(request: Request) {
   // 1. ARQUITETURA BICAMERAL: SE O MODELO NÃO É NATIVO DE VISÃO E HÁ IMAGENS
   // Aciona o Llama 3.2 Vision como o "Olho" do sistema para sintetizar a percepção
   let bicameralAnalysis = ""
-  if (imageAttachments.length > 0 && !isVisionNative) {
+  if (apiKey && imageAttachments.length > 0 && !isVisionNative) {
     const imagesToPerceive = imageAttachments.map((img) => ({ url: img.url!, name: img.name }))
     const perception = await perceiveVisuals(imagesToPerceive, apiKey)
     if (perception.analysis) {
@@ -187,7 +190,95 @@ DIRETRIZES FUNDAMENTAIS:
     })
   }
 
-  // 5. INFERÊNCIA NO MICROSERVIÇO NVIDIA NIM
+  // 5. INFERÊNCIA COM GOOGLE GEMINI (QUANDO NVIDIA_API_KEY NÃO ESTÁ CONFIGURADA)
+  if (!apiKey && geminiKey) {
+    try {
+      const ai = new GoogleGenAI({ apiKey: geminiKey })
+      const geminiParts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = []
+
+      for (const img of imageAttachments) {
+        if (img.url?.startsWith("data:")) {
+          const match = /^data:([^;]+);base64,(.+)$/.exec(img.url)
+          if (match) {
+            geminiParts.push({
+              inlineData: {
+                mimeType: match[1],
+                data: match[2],
+              },
+            })
+          }
+        }
+      }
+
+      geminiParts.push({ text: finalPrompt || "Analise as informações fornecidas." })
+
+      if (wantsStream) {
+        const stream = await ai.models.generateContentStream({
+          model: "gemini-2.5-flash",
+          contents: geminiParts,
+          config: {
+            systemInstruction: SYSTEM_PROMPT,
+            temperature,
+            topP,
+            maxOutputTokens: maxTokens,
+          },
+        })
+
+        const encoder = new TextEncoder()
+        const readable = new ReadableStream({
+          async start(controller) {
+            try {
+              for await (const chunk of stream) {
+                const text = chunk.text
+                if (text) {
+                  controller.enqueue(
+                    encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`)
+                  )
+                }
+              }
+              controller.enqueue(encoder.encode("data: [DONE]\n\n"))
+              controller.close()
+            } catch (err: any) {
+              console.error("Erro no stream Gemini:", err)
+              controller.error(err)
+            }
+          },
+        })
+
+        return new Response(readable, {
+          headers: {
+            "Content-Type": "text/event-stream; charset=utf-8",
+            "Cache-Control": "no-cache, no-transform",
+            Connection: "keep-alive",
+          },
+        })
+      }
+
+      const res = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: geminiParts,
+        config: {
+          systemInstruction: SYSTEM_PROMPT,
+          temperature,
+          topP,
+          maxOutputTokens: maxTokens,
+        },
+      })
+
+      return NextResponse.json({
+        content: res.text || "",
+        model: "gemini-2.5-flash",
+      })
+    } catch (err: any) {
+      console.error("Erro ao invocar Gemini:", err)
+      return NextResponse.json(
+        { error: err.message || "Erro interno ao processar resposta com Gemini." },
+        { status: 500 }
+      )
+    }
+  }
+
+  // 6. INFERÊNCIA NO MICROSERVIÇO NVIDIA NIM
   const nimPayload: Record<string, any> = {
     model,
     messages,

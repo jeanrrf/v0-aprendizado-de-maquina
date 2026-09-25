@@ -215,7 +215,7 @@ export function SettingsScreen({
 function ModelSection({
   currentModel,
   onSelectModel,
-  nimParams = DEFAULTNIM_PARAMS,
+  nimParams = DEFAULT_NIM_PARAMS,
   onChangeNimParams,
 }: {
   currentModel: string
@@ -584,4 +584,3 @@ function PrivacySection({ user }: { user: User | null }) {
   )
 }
 
-const DEFAULTNIM_PARAMS: NimParameters = DEFAULT_NIM_PARAMS

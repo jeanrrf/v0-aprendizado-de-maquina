@@ -517,13 +517,14 @@ export default function ChatPage() {
       // Espelhamento assíncrono para a biblioteca da aba Arquivos
       for (const att of attachments) {
         if (!att.id.startsWith("cloud-")) {
+          const sanitized = sanitizeAttachmentForFirestore(att)
           addDoc(collection(db, "users", user.uid, "files"), {
-            name: att.name,
-            type: att.type,
-            mimeType: att.mimeType,
-            sizeBytes: att.sizeBytes || 0,
-            sizeFormatted: att.sizeFormatted,
-            content: att.content || att.url || null,
+            name: sanitized.name,
+            type: sanitized.type,
+            mimeType: sanitized.mimeType,
+            sizeBytes: sanitized.sizeBytes || 0,
+            sizeFormatted: sanitized.sizeFormatted,
+            content: sanitized.content || sanitized.url || null,
             createdAt: serverTimestamp(),
           }).catch((e) => console.warn("Could not mirror file:", e))
         }
