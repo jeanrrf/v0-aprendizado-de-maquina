@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import {
   signInWithPopup,
   signInAnonymously,
@@ -21,6 +21,22 @@ import {
   orderBy,
   serverTimestamp,
 } from "firebase/firestore"
+import {
+  ArrowUp,
+  Paperclip,
+  X,
+  FileImage,
+  FileCode,
+  FileType,
+  FileText,
+  Cloud,
+  Loader2,
+  Check,
+  Square,
+  Zap,
+  Activity,
+  Brain,
+} from "lucide-react"
 import { auth, db, handleFirestoreError, OperationType } from "@/lib/firebase"
 import { NimParameters, DEFAULT_NIM_PARAMS } from "@/lib/nim-config"
 import { Sidebar } from "@/components/chat/sidebar"
@@ -32,6 +48,7 @@ import { SearchScreen } from "@/components/chat/search-screen"
 import { FilesScreen } from "@/components/chat/files-screen"
 import { SettingsScreen } from "@/components/chat/settings-screen"
 import { ResonanceField } from "@/components/ainex/resonance-field"
+import { LiveAPIOverlay } from "@/components/chat/live-api-overlay"
 import { sanitizeAttachmentForFirestore } from "@/lib/multimodal/artifacts"
 import { conversationCache } from "@/lib/cache/lru-conversation-cache"
 
@@ -120,10 +137,24 @@ export default function ChatPage() {
   const [activeStream, setActiveStream] = useState<{ conversationId: string; text: string } | null>(null)
   const [error, setError] = useState<string>()
   const [isLoading, setIsLoading] = useState(false)
-  const [modelName, setModelName] = useState("nvidia/nemotron-3-ultra-550b-a55b")
+  const [modelName, setModelName] = useState("z-ai/glm-5.3-flash")
   const [nimParams, setNimParams] = useState<NimParameters>(DEFAULT_NIM_PARAMS)
+  
+  // Novos estados para controle de fluxo e profundidade
+  const [thinkingMode, setThinkingMode] = useState<"turbo" | "balanced" | "omni">("balanced")
+  const [isLiveOpen, setIsLiveOpen] = useState(false)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
-  // Monitor Authentication State
+  const handleStopProcessing = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+      setIsLoading(false)
+      setActiveStream(null)
+      setError("Processamento interrompido pelo operador.")
+    }
+  }
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser)
@@ -348,6 +379,10 @@ export default function ChatPage() {
   async function sendMessage(messageText: string, attachments: ChatAttachment[] = []) {
     setError(undefined)
 
+    // Inicializa o AbortController para permitir parada manual
+    abortControllerRef.current = new AbortController()
+    const signal = abortControllerRef.current.signal
+
     const userMessageId = crypto.randomUUID()
     const assistantMessageId = crypto.randomUUID()
 
@@ -381,6 +416,7 @@ export default function ChatPage() {
           const res = await fetch("/api/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            signal,
             body: JSON.stringify({
               message: messageText,
               attachments,
@@ -392,6 +428,7 @@ export default function ChatPage() {
               frequency_penalty: nimParams.frequency_penalty,
               presence_penalty: nimParams.presence_penalty,
               history: conversationHistory,
+              thinking_mode: thinkingMode,
             }),
           })
 
@@ -426,6 +463,7 @@ export default function ChatPage() {
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal,
           body: JSON.stringify({
             message: messageText,
             attachments,
@@ -435,6 +473,7 @@ export default function ChatPage() {
             top_p: nimParams.top_p,
             max_tokens: nimParams.max_tokens,
             history: conversationHistory,
+            thinking_mode: thinkingMode,
           }),
         })
         const data = await res.json()
@@ -537,6 +576,7 @@ export default function ChatPage() {
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal,
           body: JSON.stringify({
             message: messageText,
             attachments,
@@ -548,6 +588,7 @@ export default function ChatPage() {
             frequency_penalty: nimParams.frequency_penalty,
             presence_penalty: nimParams.presence_penalty,
             history: conversationHistory,
+            thinking_mode: thinkingMode,
           }),
         })
 
@@ -595,6 +636,7 @@ export default function ChatPage() {
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal,
           body: JSON.stringify({
             message: messageText,
             attachments,
@@ -604,6 +646,7 @@ export default function ChatPage() {
             top_p: nimParams.top_p,
             max_tokens: nimParams.max_tokens,
             history: conversationHistory,
+            thinking_mode: thinkingMode,
           }),
         })
 
@@ -635,6 +678,10 @@ export default function ChatPage() {
         await assistantBatch.commit()
       }
     } catch (cause) {
+      if (cause instanceof Error && cause.name === "AbortError") {
+        console.log("AINEX: Operação cancelada pelo usuário.")
+        return
+      }
       console.error("Chat & Firestore error:", cause)
       setError(cause instanceof Error ? cause.message : "Ocorreu um erro ao processar sua mensagem.")
 
@@ -659,6 +706,7 @@ export default function ChatPage() {
 
       {/* Main container */}
       <div className="relative z-10 flex h-full w-full">
+        <LiveAPIOverlay isOpen={isLiveOpen} onClose={() => setIsLiveOpen(false)} />
         <Sidebar
           activeItem={active}
           onSelect={(tabId) => {
@@ -675,6 +723,8 @@ export default function ChatPage() {
             showModelInfo={active === "chat"}
             modelName={modelName}
             onSelectModel={setModelName}
+            onNewChat={handleNewConversation}
+            onStartLive={() => setIsLiveOpen(true)}
             user={user}
             onSignIn={handleSignIn}
           />
@@ -701,6 +751,9 @@ export default function ChatPage() {
                   onSubmit={sendMessage}
                   isLoading={isLoading}
                   user={user}
+                  thinkingMode={thinkingMode}
+                  onThinkingModeChange={setThinkingMode}
+                  onStop={handleStopProcessing}
                 />
               </div>
             )}

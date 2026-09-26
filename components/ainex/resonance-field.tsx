@@ -186,7 +186,20 @@ export function ResonanceField({ user }: ResonanceFieldProps) {
 
     const rgba = (a: number) => `rgba(235, 30, 45, ${Math.max(0, Math.min(1, a))})`
 
+    let isVisible = true
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        isVisible = entry.isIntersecting
+      },
+      { threshold: 0 }
+    )
+    if (canvas) observer.observe(canvas)
+
     const draw = (now: number) => {
+      if (!isVisible) {
+        raf = requestAnimationFrame(draw)
+        return
+      }
       frame++
       lastT = now
       const t = now * 0.001
@@ -348,6 +361,7 @@ export function ResonanceField({ user }: ResonanceFieldProps) {
 
     return () => {
       cancelAnimationFrame(raf)
+      observer.disconnect()
       window.clearInterval(interval)
       ro.disconnect()
       canvas.removeEventListener("pointermove", onMove)

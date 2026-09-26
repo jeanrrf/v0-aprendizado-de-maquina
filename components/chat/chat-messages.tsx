@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { memo, useEffect, useRef, useState } from "react"
 import {
   Copy,
   Check,
@@ -79,9 +79,17 @@ export function ChatMessages({
   }
 
   // Scroll automático inteligente: rola ao fim a cada chunk/token recebido do streaming
+  // Throttled to avoid excessive DOM operations during high-frequency token updates
+  const lastScrollTimeRef = useRef(0)
   useEffect(() => {
+    const now = performance.now()
+    if (now - lastScrollTimeRef.current < 32) return // Max ~30fps scroll updates
+
     if (isNearBottomRef.current && bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: "smooth", block: "end" })
+      // Usar "auto" (instantâneo) durante streaming para evitar engasgos na UI
+      const behavior = streamingText ? "auto" : "smooth"
+      bottomRef.current.scrollIntoView({ behavior, block: "end" })
+      lastScrollTimeRef.current = now
     }
   }, [messages, streamingText, isLoading])
 
@@ -211,7 +219,7 @@ export function ChatMessages({
   )
 }
 
-function UserMessageBubble({
+const UserMessageBubble = memo(function UserMessageBubble({
   content,
   attachments = [],
 }: {
@@ -294,7 +302,7 @@ function UserMessageBubble({
       )}
     </div>
   )
-}
+})
 
 function CodeBlock({ language, code }: { language: string; code: string }) {
   const [copied, setCopied] = useState(false)
@@ -355,7 +363,7 @@ function parseThinkingContent(raw: string) {
   return { thinking, isThinkingActive, cleanContent }
 }
 
-function AssistantMessageBubble({
+const AssistantMessageBubble = memo(function AssistantMessageBubble({
   content,
   modelName,
   isStreaming = false,
@@ -366,7 +374,7 @@ function AssistantMessageBubble({
 }) {
   const [copied, setCopied] = useState(false)
   const { thinking, isThinkingActive, cleanContent } = parseThinkingContent(content)
-  const [showReasoning, setShowReasoning] = useState(true)
+  const [showReasoning, setShowReasoning] = useState(false)
 
   const handleCopy = async () => {
     try {
@@ -385,10 +393,10 @@ function AssistantMessageBubble({
   return (
     <div
       className={cn(
-        "group relative flex items-start gap-3 rounded-2xl border bg-card/75 p-4 sm:p-5 shadow-sm transition-colors pr-4 sm:pr-6",
+        "group relative flex items-start gap-3 rounded-2xl border bg-card/75 p-4 sm:p-5 shadow-sm transition-all duration-300 pr-4 sm:pr-6",
         isStreaming
-          ? "border-primary/50 shadow-primary/5"
-          : "border-border/70 hover:border-border"
+          ? "border-primary/50 shadow-[0_0_15px_rgba(var(--primary),0.1)] shadow-primary/5"
+          : "border-border/70 hover:border-primary/30 hover:shadow-[0_4px_20px_rgba(0,0,0,0.15)]"
       )}
     >
       {/* Avatar dinâmico */}
@@ -542,7 +550,7 @@ function AssistantMessageBubble({
                 ),
               }}
             >
-              {content}
+              {cleanContent}
             </Markdown>
           ) : (
             <span className="text-xs text-muted-foreground italic flex items-center gap-1">
@@ -559,4 +567,4 @@ function AssistantMessageBubble({
       </div>
     </div>
   )
-}
+})

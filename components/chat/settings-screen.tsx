@@ -44,7 +44,7 @@ interface SettingsScreenProps {
 }
 
 export function SettingsScreen({
-  currentModel = "meta/llama-3.2-11b-vision-instruct",
+  currentModel = "z-ai/glm-5.3-flash",
   onSelectModel,
   nimParams = DEFAULT_NIM_PARAMS,
   onChangeNimParams,
@@ -225,10 +225,34 @@ function ModelSection({
 }) {
   const models = [
     {
+      id: "z-ai/glm-5.3-flash",
+      name: "Z-AI GLM-5.3-Flash",
+      badge: "Nativo Multimodal · Prioridade NIM",
+      desc: "Modelo de elite da Z-AI com 320B total / 18B ativos. MoE com KDA híbrido e atenção MLA esparsa.",
+    },
+    {
+      id: "deepseek-ai/deepseek-v4.1-flash",
+      name: "DeepSeek v4.1 Flash",
+      badge: "Multimodal MoE · Eficiente",
+      desc: "552B MoE com 8B ativos. Suporte multimodal nativo e baixo custo de API.",
+    },
+    {
+      id: "moonshotai/kimi-k3",
+      name: "Moonshot AI Kimi-k3",
+      badge: "Contexto Longo · 2.8T Params",
+      desc: "Modelo massivo para coding de longo horizonte, uso de agentes e compreensão de imagem.",
+    },
+    {
+      id: "meta/muse-glimmer-30b",
+      name: "Meta Muse Glimmer 30B",
+      badge: "Raciocínio Multimodal",
+      desc: "Modelo de raciocínio multimodal aceitando texto e imagens com tool-calling nativo.",
+    },
+    {
       id: "meta/llama-3.2-11b-vision-instruct",
-      name: "Meta LLaMA 3.2 11B (NVIDIA NIM)",
-      badge: "Recomendado · Streaming Ultra-rápido",
-      desc: "Novo modelo ultra-rápido, responsivo e excelente em raciocínio, lógica e português.",
+      name: "Meta LLaMA 3.2 11B (Vision)",
+      badge: "Recomendado · Responsivo",
+      desc: "Modelo ultra-rápido da Meta para tarefas de visão e chat geral.",
     },
     {
       id: "nvidia/nemotron-3-ultra-550b-a55b",
@@ -237,10 +261,10 @@ function ModelSection({
       desc: "Modelo fundacional da NVIDIA com raciocínio analítico profundo.",
     },
     {
-      id: "nvidia/nemotron-3-super-120b-a12b",
-      name: "NVIDIA Nemotron 3 Super 120B",
-      badge: "Equilibrado",
-      desc: "Modelo intermediário da família Nemotron para processamento de linguagem natural.",
+      id: "meta/llama-guard-4-12b",
+      name: "Llama Guard 4 12B (Safety)",
+      badge: "Classificador de Segurança",
+      desc: "Modelo multimodal especializado em classificar a segurança de prompts e respostas.",
     },
   ]
 

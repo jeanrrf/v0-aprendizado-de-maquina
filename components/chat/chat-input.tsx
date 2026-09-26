@@ -20,11 +20,19 @@ import {
   FileText,
   Cloud,
   Loader2,
+  Check,
+  Square,
+  Zap,
+  Activity,
+  Brain,
+  Mic,
+  MicOff,
 } from "lucide-react"
 import { User } from "firebase/auth"
 import { collection, getDocs, limit, query, orderBy } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import { cn } from "@/lib/utils"
+import { motion, AnimatePresence } from "motion/react"
 
 export interface ChatAttachment {
   id: string
@@ -41,6 +49,9 @@ interface ChatInputProps {
   onSubmit: (message: string, attachments?: ChatAttachment[]) => void
   isLoading: boolean
   user?: User | null
+  thinkingMode?: "turbo" | "balanced" | "omni"
+  onThinkingModeChange?: (mode: "turbo" | "balanced" | "omni") => void
+  onStop?: () => void
 }
 
 function formatBytes(bytes: number): string {
@@ -61,7 +72,14 @@ function detectFileType(name: string, mime: string): "image" | "doc" | "code" | 
   return "doc"
 }
 
-export function ChatInput({ onSubmit, isLoading, user }: ChatInputProps) {
+export function ChatInput({ 
+  onSubmit, 
+  isLoading, 
+  user,
+  thinkingMode = "balanced",
+  onThinkingModeChange,
+  onStop 
+}: ChatInputProps) {
   const [message, setMessage] = useState("")
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const [isProcessingFiles, setIsProcessingFiles] = useState(false)
@@ -69,6 +87,63 @@ export function ChatInput({ onSubmit, isLoading, user }: ChatInputProps) {
   const [showCloudPicker, setShowCloudPicker] = useState(false)
   const [cloudFiles, setCloudFiles] = useState<ChatAttachment[]>([])
   const [loadingCloudFiles, setLoadingCloudFiles] = useState(false)
+
+  const [isRecording, setIsRecording] = useState(false)
+  const [isTranscribing, setIsTranscribing] = useState(false)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const recorder = new MediaRecorder(stream)
+      mediaRecorderRef.current = recorder
+      audioChunksRef.current = []
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data)
+      }
+
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" })
+        await handleTranscribe(audioBlob)
+        stream.getTracks().forEach((track) => track.stop())
+      }
+
+      recorder.start()
+      setIsRecording(true)
+    } catch (err) {
+      console.error("Mic error:", err)
+      alert("Não foi possível acessar o microfone.")
+    }
+  }
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop()
+      setIsRecording(false)
+    }
+  }
+
+  const handleTranscribe = async (audioBlob: Blob) => {
+    setIsTranscribing(true)
+    try {
+      const formData = new FormData()
+      formData.append("audio", audioBlob)
+      const res = await fetch("/api/transcribe", {
+        method: "POST",
+        body: formData,
+      })
+      const data = await res.json()
+      if (data.text) {
+        setMessage((prev) => (prev ? `${prev} ${data.text}` : data.text))
+      }
+    } catch (err) {
+      console.error("Transcription error:", err)
+    } finally {
+      setIsTranscribing(false)
+    }
+  }
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -349,54 +424,86 @@ export function ChatInput({ onSubmit, isLoading, user }: ChatInputProps) {
         />
 
         {/* Modal/Popover flutuante para anexar arquivos já existentes no Firestore */}
-        {showCloudPicker && (
-          <div className="rounded-xl border border-border bg-card p-3 shadow-xl animate-in fade-in-50 duration-150 mb-1">
-            <div className="flex items-center justify-between pb-2 border-b border-border">
-              <span className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-                <Cloud className="h-3.5 w-3.5 text-primary" />
-                <span>Anexar da Nuvem (Firestore)</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowCloudPicker(false)}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-            {loadingCloudFiles ? (
-              <div className="flex items-center justify-center py-4 text-xs text-muted-foreground gap-2">
-                <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                <span>Carregando sua biblioteca...</span>
+        <AnimatePresence>
+          {showCloudPicker && (
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="rounded-2xl border border-border bg-popover/95 backdrop-blur-xl p-4 shadow-2xl mb-3 relative z-30 ring-1 ring-white/10"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-border/50">
+                <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-primary">
+                  <Cloud className="h-4 w-4" />
+                  <span>Biblioteca na Nuvem</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowCloudPicker(false)}
+                  className="rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
-            ) : cloudFiles.length === 0 ? (
-              <p className="py-3 text-center text-xs text-muted-foreground">
-                Nenhum arquivo na nuvem ainda. Faça upload pelo botão de clipe ou na aba Arquivos!
-              </p>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mt-2 max-h-40 overflow-y-auto">
-                {cloudFiles.map((cf) => (
-                  <button
-                    key={cf.id}
-                    type="button"
-                    onClick={() => handleSelectCloudFile(cf)}
-                    className="flex items-center gap-2 rounded-lg p-2 text-left hover:bg-muted/70 transition-colors border border-border/50 text-xs text-foreground"
-                  >
-                    {cf.type === "image" ? (
-                      <FileImage className="h-4 w-4 text-primary shrink-0" />
-                    ) : cf.type === "code" ? (
-                      <FileCode className="h-4 w-4 text-primary shrink-0" />
-                    ) : (
-                      <FileText className="h-4 w-4 text-primary shrink-0" />
-                    )}
-                    <span className="truncate flex-1 font-medium">{cf.name}</span>
-                    <span className="text-[10px] text-muted-foreground font-mono">{cf.sizeFormatted}</span>
-                  </button>
-                ))}
+              
+              <div className="mt-4">
+                {loadingCloudFiles ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-xs text-muted-foreground gap-3">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                    <span className="font-medium">Sincronizando com o Firestore...</span>
+                  </div>
+                ) : cloudFiles.length === 0 ? (
+                  <div className="py-8 text-center">
+                    <p className="text-xs text-muted-foreground font-medium leading-relaxed">
+                      Sua biblioteca está vazia.<br />
+                      Anexe arquivos locais para salvá-los automaticamente.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-primary/20">
+                    {cloudFiles.map((cf) => {
+                      const isSelected = attachments.some((a) => a.id === cf.id || a.name === cf.name)
+                      return (
+                        <button
+                          key={cf.id}
+                          type="button"
+                          disabled={isSelected}
+                          onClick={() => handleSelectCloudFile(cf)}
+                          className={cn(
+                            "flex items-center gap-3 rounded-xl p-2.5 text-left transition-all border group",
+                            isSelected 
+                              ? "bg-primary/10 border-primary/30 opacity-60 cursor-default" 
+                              : "border-border/50 hover:border-primary/40 hover:bg-accent/50"
+                          )}
+                        >
+                          <div className={cn(
+                            "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border",
+                            isSelected ? "border-primary/50 bg-primary/20" : "border-border bg-muted/50 group-hover:border-primary/30"
+                          )}>
+                            {isSelected ? (
+                              <Check className="h-4 w-4 text-primary" />
+                            ) : cf.type === "image" ? (
+                              <FileImage className="h-4 w-4 text-primary" />
+                            ) : cf.type === "code" ? (
+                              <FileCode className="h-4 w-4 text-primary" />
+                            ) : (
+                              <FileText className="h-4 w-4 text-primary" />
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <span className="block truncate text-xs font-bold text-foreground">{cf.name}</span>
+                            <span className="text-[10px] text-muted-foreground font-mono">{cf.sizeFormatted}</span>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Faixa de Anexos com Previews Dinâmicos (Imagens e Arquivos) */}
         {(attachments.length > 0 || isProcessingFiles) && (
@@ -484,14 +591,75 @@ export function ChatInput({ onSubmit, isLoading, user }: ChatInputProps) {
                 isLoading
                   ? "AINEX respondendo em tempo real... (digite sua próxima mensagem)"
                   : attachments.length > 0
-                  ? "Pergunte ou comente sobre as fotos/arquivos anexados..."
-                  : "Pergunte ao AINEX, anexe arquivos ou cole imagens com Ctrl+V..."
+                  ? "Pergunte ou comente sobre as fotos/arquivos/PDFs anexados..."
+                  : "Pergunte ao AINEX, anexe arquivos (PDFs, mídias, código) ou cole imagens com Ctrl+V..."
               }
               aria-label="Mensagem"
               className="max-h-40 min-h-[26px] w-full resize-none bg-transparent py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none scrollbar-none"
             />
 
             <div className="flex items-center gap-1 pl-2 pb-0.5">
+              {/* Controles de Profundidade de Pensamento */}
+              <div className="flex items-center gap-0.5 rounded-lg bg-muted/30 p-0.5 mr-1 border border-border/40">
+                <button
+                  type="button"
+                  onClick={() => onThinkingModeChange?.("turbo")}
+                  title="Modo Turbo: Respostas instantâneas"
+                  className={cn(
+                    "flex h-6 w-6 items-center justify-center rounded transition-all",
+                    thinkingMode === "turbo" ? "bg-amber-500/20 text-amber-500 shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Zap className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onThinkingModeChange?.("balanced")}
+                  title="Modo Equilibrado: Razão e velocidade"
+                  className={cn(
+                    "flex h-6 w-6 items-center justify-center rounded transition-all",
+                    thinkingMode === "balanced" ? "bg-primary/20 text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Activity className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onThinkingModeChange?.("omni")}
+                  title="Modo Omni: Raciocínio profundo e analítico"
+                  className={cn(
+                    "flex h-6 w-6 items-center justify-center rounded transition-all",
+                    thinkingMode === "omni" ? "bg-purple-500/20 text-purple-500 shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Brain className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              {/* Botão de Transcrição por Voz */}
+              <button
+                type="button"
+                onClick={isRecording ? stopRecording : startRecording}
+                disabled={isTranscribing}
+                title={isRecording ? "Parar Gravação" : "Transcrever Voz"}
+                className={cn(
+                  "flex h-7 w-7 items-center justify-center rounded-lg transition-all active:scale-95",
+                  isRecording 
+                    ? "bg-red-500/20 text-red-500 animate-pulse" 
+                    : isTranscribing 
+                      ? "bg-muted text-muted-foreground cursor-wait"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
+              >
+                {isTranscribing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : isRecording ? (
+                  <MicOff className="h-4 w-4" />
+                ) : (
+                  <Mic className="h-4 w-4" />
+                )}
+              </button>
+
               {/* Botão de Anexo de Arquivo e Foto */}
               <button
                 type="button"
@@ -521,20 +689,32 @@ export function ChatInput({ onSubmit, isLoading, user }: ChatInputProps) {
                 </button>
               )}
 
-              {/* Botão de Enviar */}
-              <button
-                type="submit"
-                aria-label="Enviar mensagem"
-                disabled={isLoading || (!message.trim() && attachments.length === 0)}
-                className={cn(
-                  "flex h-7 w-7 items-center justify-center rounded-lg transition-all duration-200",
-                  (message.trim() || attachments.length > 0) && !isLoading
-                    ? "bg-primary text-primary-foreground shadow-sm hover:opacity-90 active:scale-95"
-                    : "text-muted-foreground opacity-40 hover:bg-muted"
-                )}
-              >
-                <ArrowUp className="h-4 w-4 stroke-[2.5]" />
-              </button>
+              {/* Botão de Enviar ou Parar */}
+              {isLoading ? (
+                <button
+                  type="button"
+                  onClick={onStop}
+                  aria-label="Parar geração"
+                  title="Parar processamento"
+                  className="flex h-7 w-7 items-center justify-center rounded-lg bg-destructive/10 text-destructive shadow-sm hover:bg-destructive/20 active:scale-95 animate-pulse"
+                >
+                  <Square className="h-4 w-4 fill-current" />
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  aria-label="Enviar mensagem"
+                  disabled={isLoading || (!message.trim() && attachments.length === 0)}
+                  className={cn(
+                    "flex h-7 w-7 items-center justify-center rounded-lg transition-all duration-200",
+                    (message.trim() || attachments.length > 0) && !isLoading
+                      ? "bg-primary text-primary-foreground shadow-sm hover:opacity-90 active:scale-95"
+                      : "text-muted-foreground opacity-40 hover:bg-muted"
+                  )}
+                >
+                  <ArrowUp className="h-4 w-4 stroke-[2.5]" />
+                </button>
+              )}
             </div>
           </div>
         </div>

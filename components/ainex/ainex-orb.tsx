@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { memo, useEffect, useRef } from "react"
 import { cn } from "@/lib/utils"
 
 export type AinexState = "idle" | "listening" | "thinking" | "speaking"
@@ -20,24 +20,33 @@ interface Particle {
   z: number
 }
 
-// Reads an oklch/hex CSS variable and returns an rgb tuple by painting it once.
+// Reads an oklch/hex CSS variable and returns an rgb tuple.
+// Memoized to avoid creating elements and contexts on every size change or re-render.
+const colorCache: Record<string, [number, number, number]> = {}
+
 function resolveColor(varName: string, fallback: [number, number, number]): [number, number, number] {
   if (typeof window === "undefined") return fallback
+  if (colorCache[varName]) return colorCache[varName]
+
   try {
-    const ctx = document.createElement("canvas").getContext("2d")
+    const tempCanvas = document.createElement("canvas")
+    tempCanvas.width = 1
+    tempCanvas.height = 1
+    const ctx = tempCanvas.getContext("2d")
     if (!ctx) return fallback
     const value = getComputedStyle(document.documentElement).getPropertyValue(varName).trim()
     if (!value) return fallback
     ctx.fillStyle = value
     ctx.fillRect(0, 0, 1, 1)
     const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data
+    colorCache[varName] = [r, g, b]
     return [r, g, b]
   } catch {
     return fallback
   }
 }
 
-export function AinexOrb({ size = 64, state = "idle", className }: AinexOrbProps) {
+export const AinexOrb = memo(function AinexOrb({ size = 64, state = "idle", className }: AinexOrbProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const stateRef = useRef<AinexState>(state)
 
@@ -89,7 +98,20 @@ export function AinexOrb({ size = 64, state = "idle", className }: AinexOrbProps
     const targetEnergy = (s: AinexState) =>
       s === "thinking" ? 1 : s === "speaking" ? 0.85 : s === "listening" ? 0.5 : 0.22
 
+    let isVisible = true
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        isVisible = entry.isIntersecting
+      },
+      { threshold: 0 }
+    )
+    observer.observe(canvas)
+
     const draw = () => {
+      if (!isVisible) {
+        raf = requestAnimationFrame(draw)
+        return
+      }
       const s = stateRef.current
       const spd = speedFor(s)
       energy += (targetEnergy(s) - energy) * 0.05
@@ -141,16 +163,19 @@ export function AinexOrb({ size = 64, state = "idle", className }: AinexOrbProps
       }
 
       // connect nearby nodes (sinapses firing with energy)
+      // Optimized: only check a subset of connections if size is large
+      const maxDist = size * 0.22
       for (let i = 0; i < positions.length; i++) {
-        for (let j = i + 1; j < positions.length; j++) {
-          const a = positions[i]
+        const a = positions[i]
+        // Only check 5 neighbors for each node to limit O(N^2)
+        for (let j = i + 1; j < Math.min(i + 6, positions.length); j++) {
           const b = positions[j]
           const dx = a.x - b.x
           const dy = a.y - b.y
           const dist = Math.hypot(dx, dy)
-          if (dist < size * 0.22) {
+          if (dist < maxDist) {
             const fire = (Math.sin(t * 3 + i + j) * 0.5 + 0.5) * energy
-            const alpha = (1 - dist / (size * 0.22)) * (0.05 + fire * 0.35)
+            const alpha = (1 - dist / maxDist) * (0.05 + fire * 0.35)
             ctx.strokeStyle = rgba(alpha)
             ctx.beginPath()
             ctx.moveTo(a.x, a.y)
@@ -190,16 +215,20 @@ export function AinexOrb({ size = 64, state = "idle", className }: AinexOrbProps
     }
 
     raf = requestAnimationFrame(draw)
-    return () => cancelAnimationFrame(raf)
+    return () => {
+      cancelAnimationFrame(raf)
+      observer.disconnect()
+    }
   }, [size])
 
-  return (
-    <canvas
-      ref={canvasRef}
-      role="img"
-      aria-label="AINEX, esfera de luz neural"
-      className={cn("block", className)}
-      style={{ width: size, height: size }}
-    />
-  )
-}
+    return (
+      <canvas
+        ref={canvasRef}
+        role="img"
+        aria-label="AINEX, esfera de luz neural"
+        className={cn("block", className)}
+        style={{ width: size, height: size }}
+      />
+    )
+  }
+)
