@@ -111,7 +111,9 @@ export function ChatMessages({
         {/* Quando não há mensagens, exibe o Hero centralizado e sugestões iniciais */}
         {!hasContent ? (
           <div className="my-auto flex flex-col items-center justify-center py-10 text-center animate-in fade-in-50 duration-300">
-            <AinexOrb size={100} state="idle" />
+            <div className="h-20 w-20 rounded-full bg-primary/20 flex items-center justify-center mb-4">
+              <Sparkles className="h-10 w-10 text-primary" />
+            </div>
             <h2 className="mt-4 text-2xl font-bold tracking-tight text-foreground">
               AINEX Neural Core
             </h2>
@@ -172,7 +174,9 @@ export function ChatMessages({
             {isLoading && streamingText === null && messages[messages.length - 1]?.role === "user" && (
               <div className="flex items-start gap-3 rounded-2xl border border-border/60 bg-card/40 p-4 animate-in fade-in duration-200">
                 <div className="shrink-0 mt-0.5">
-                  <AinexOrb size={28} state="speaking" />
+                  <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center">
+                    <Loader2 className="h-4 w-4 text-primary animate-spin" />
+                  </div>
                 </div>
                 <div className="flex-1 space-y-2">
                   <div className="flex items-center gap-2">
@@ -219,7 +223,7 @@ export function ChatMessages({
   )
 }
 
-const UserMessageBubble = memo(function UserMessageBubble({
+const UserMessageBubble = function UserMessageBubble({
   content,
   attachments = [],
 }: {
@@ -302,7 +306,7 @@ const UserMessageBubble = memo(function UserMessageBubble({
       )}
     </div>
   )
-})
+}
 
 function CodeBlock({ language, code }: { language: string; code: string }) {
   const [copied, setCopied] = useState(false)
@@ -363,7 +367,7 @@ function parseThinkingContent(raw: string) {
   return { thinking, isThinkingActive, cleanContent }
 }
 
-const AssistantMessageBubble = memo(function AssistantMessageBubble({
+const AssistantMessageBubble = function AssistantMessageBubble({
   content,
   modelName,
   isStreaming = false,
@@ -401,7 +405,9 @@ const AssistantMessageBubble = memo(function AssistantMessageBubble({
     >
       {/* Avatar dinâmico */}
       <div className="shrink-0 mt-0.5">
-        <AinexOrb size={30} state={isStreaming ? "speaking" : "idle"} />
+        <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center">
+          <Sparkles className={cn("h-4 w-4 text-primary", isStreaming && "animate-pulse")} />
+        </div>
       </div>
 
       {/* Conteúdo principal */}
@@ -567,4 +573,4 @@ const AssistantMessageBubble = memo(function AssistantMessageBubble({
       </div>
     </div>
   )
-})
+}

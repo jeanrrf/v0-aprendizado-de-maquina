@@ -59,22 +59,35 @@ export function LiveAPIOverlay({ isOpen, onClose }: LiveAPIOverlayProps) {
       processor.connect(inputCtx.destination)
 
       processor.onaudioprocess = (e) => {
-        if (ws.readyState === WebSocket.OPEN && isMicOn) {
-          const inputData = e.inputBuffer.getChannelData(0)
-          const pcmData = new Int16Array(inputData.length)
-          for (let i = 0; i < inputData.length; i++) {
-            pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7fff
+        try {
+          if (ws.readyState === WebSocket.OPEN && isMicOn) {
+            const inputData = e.inputBuffer.getChannelData(0)
+            const pcmData = new Int16Array(inputData.length)
+            for (let i = 0; i < inputData.length; i++) {
+              pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7fff
+            }
+            
+            // Otimização: Evitar loop de concatenação lenta de strings
+            const uint8Array = new Uint8Array(pcmData.buffer)
+            let binary = ""
+            const chunkSize = 8192
+            for (let i = 0; i < uint8Array.length; i += chunkSize) {
+              binary += String.fromCharCode.apply(null, uint8Array.subarray(i, i + chunkSize) as any)
+            }
+            const base64 = btoa(binary)
+            
+            // Verificação de segurança antes de enviar
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ audio: base64 }))
+            }
           }
-          
-          // Otimização: Evitar loop de concatenação lenta de strings
-          const uint8Array = new Uint8Array(pcmData.buffer)
-          let binary = ""
-          const chunkSize = 8192
-          for (let i = 0; i < uint8Array.length; i += chunkSize) {
-            binary += String.fromCharCode.apply(null, uint8Array.subarray(i, i + chunkSize) as any)
+        } catch (error: any) {
+          // Ignora silenciosamente erros de conexão perdida durante o processamento, 
+          // similar ao "FrameDoesNotExistError" em extensões.
+          if (error.message?.includes("not open") || error.message?.includes("closed")) {
+            return
           }
-          const base64 = btoa(binary)
-          ws.send(JSON.stringify({ audio: base64 }))
+          console.warn("Audio processing error:", error)
         }
       }
 

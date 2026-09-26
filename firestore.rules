@@ -1,26 +1,68 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // helpers
     function isSignedIn() {
       return request.auth != null;
     }
-
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
-
-    match /test/{testId} {
-      allow read: if true;
+    function incomingData() {
+      return request.resource.data;
+    }
+    function existingData() {
+      return resource.data;
+    }
+    function isUnchanged(key) {
+      return (key in existingData()) && (key in incomingData()) && (existingData()[key] == incomingData()[key]);
     }
 
     match /users/{userId} {
-      allow get, create, update: if isOwner(userId);
+      function isValidUser() {
+        let data = incomingData();
+        return data.email is string &&
+               data.email.size() <= 255 &&
+               data.createdAt != null &&
+               (data.displayName == null || data.displayName is string) &&
+               (data.photoURL == null || data.photoURL is string) &&
+               (data.statusTitle == null || data.statusTitle is string) &&
+               (data.preferredModel == null || data.preferredModel is string);
+      }
+      
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser();
+      allow update: if isOwner(userId) && isValidUser() && isUnchanged('createdAt');
 
       match /conversations/{conversationId} {
-        allow get, list, create, update, delete: if isOwner(userId);
+        function isValidConversation() {
+          let data = incomingData();
+          return data.title is string &&
+                 data.title.size() <= 200 &&
+                 data.createdAt != null &&
+                 (data.preview == null || data.preview is string) &&
+                 (data.model == null || data.model is string) &&
+                 (data.status == null || data.status in ['idle', 'streaming', 'completed', 'error']);
+        }
+
+        allow get, list, delete: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidConversation();
+        allow update: if isOwner(userId) && isValidConversation() && isUnchanged('createdAt');
 
         match /messages/{messageId} {
-          allow get, list, create, update, delete: if isOwner(userId);
+          function isValidMessage() {
+            let data = incomingData();
+            return data.role in ['user', 'assistant'] &&
+                   data.content is string &&
+                   data.content.size() <= 50000 &&
+                   data.createdAt != null &&
+                   (data.status == null || data.status in ['streaming', 'completed', 'error']) &&
+                   (data.attachments == null || data.attachments is list);
+          }
+
+          allow get, list, delete: if isOwner(userId);
+          allow create: if isOwner(userId) && isValidMessage();
+          allow update: if isOwner(userId) && isValidMessage() && isUnchanged('createdAt');
         }
       }
 

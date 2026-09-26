@@ -59,13 +59,6 @@ export async function POST(request: Request) {
   }
 
   let model = requestedModel || process.env.NVIDIA_MODEL || DEFAULT_MODEL
-  let isVisionNative = 
-    model.toLowerCase().includes("vision") || 
-    model.toLowerCase().includes("glm") || 
-    model.toLowerCase().includes("deepseek") ||
-    model.toLowerCase().includes("kimi") ||
-    model.toLowerCase().includes("muse") ||
-    model.toLowerCase().includes("guard")
 
   const wantsStream = body.stream !== false
   const thinkingMode = body.thinking_mode || "balanced"
@@ -199,28 +192,81 @@ ${modeInstruction}`
     return msgs
   }
 
-  // 3. INFERÊNCIA COM FALLBACK
+  // 3. INFERÊNCIA COM FALLBACK (NVIDIA NIM -> GOOGLE GEMINI)
   async function performInference(targetModel: string) {
     const targetIsVision = targetModel.toLowerCase().includes("vision") || targetModel.toLowerCase().includes("glm")
     const messages = buildMessages(targetIsVision)
 
-    return fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: targetModel,
-        messages,
-        temperature,
-        top_p: topP,
-        max_tokens: maxTokens,
-        frequency_penalty: frequencyPenalty,
-        presence_penalty: presencePenalty,
-        stream: wantsStream,
-      }),
-    })
+    // Tenta NVIDIA NIM
+    try {
+      const nvidiaRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: targetModel,
+          messages,
+          temperature,
+          top_p: topP,
+          max_tokens: maxTokens,
+          frequency_penalty: frequencyPenalty,
+          presence_penalty: presencePenalty,
+          stream: wantsStream,
+        }),
+      })
+
+      if (nvidiaRes.ok) return nvidiaRes
+      
+      console.warn(`NVIDIA Error (${nvidiaRes.status}). Verificando fallback Gemini...`)
+    } catch (err) {
+      console.error("NVIDIA Connection Error:", err)
+    }
+
+    // FALLBACK: GOOGLE GEMINI (Nativo Multimodal)
+    const geminiKey = process.env.GEMINI_API_KEY
+    if (geminiKey) {
+      console.log("AINEX: Acionando motor de ressonância Gemini (Google Cloud)...")
+      const ai = new GoogleGenAI({ apiKey: geminiKey })
+      
+      const geminiMessages = buildMessages(true) // Força multimodal para Gemini
+      const userAndAssistant = geminiMessages.filter(m => m.role !== "system")
+      
+      // Converte mensagens para o formato de conteúdo do Gemini (strings por enquanto)
+      const contents = userAndAssistant.map(m => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: typeof m.content === "string" ? m.content : JSON.stringify(m.content) }]
+      }))
+
+      try {
+        const response = await ai.models.generateContent({
+          model: "gemini-1.5-flash",
+          contents: contents as any,
+          config: {
+            temperature,
+            topP,
+            maxOutputTokens: maxTokens,
+          }
+        })
+
+        const text = response.text
+
+        // Mapeia para uma resposta compatível com o pipeline fetch existente
+        return new Response(JSON.stringify({
+          choices: [{ message: { content: text } }],
+          model: "gemini-1.5-flash",
+          usage: { total_tokens: 0 }
+        }), { 
+          status: 200, 
+          headers: { "Content-Type": "application/json" } 
+        })
+      } catch (geminiErr) {
+        console.error("Gemini Fallback Error:", geminiErr)
+      }
+    }
+
+    return new Response(JSON.stringify({ error: "Todos os motores neurais (NVIDIA e Gemini) falharam." }), { status: 502 })
   }
 
   let nimResponse = await performInference(model)

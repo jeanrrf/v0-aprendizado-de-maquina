@@ -38,7 +38,6 @@ export default function RootLayout({
     <html lang="pt-BR">
       <body className="font-sans antialiased">
         {children}
-        <Analytics />
       </body>
     </html>
   )

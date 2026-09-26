@@ -39,7 +39,10 @@ export function Sidebar({ activeItem, onSelect, user, onSignIn, onSignOut }: Sid
         {items.map((item) => (
           <button
             key={item.id}
-            onClick={() => onSelect(item.id)}
+            onClick={() => {
+              console.log("SIDEBAR_SELECT:", item.id);
+              onSelect(item.id);
+            }}
             className={cn(
               "group relative flex h-12 w-12 items-center justify-center rounded-lg transition-all duration-200",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar",
